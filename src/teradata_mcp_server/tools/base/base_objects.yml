@@ -50,6 +50,28 @@ _testMyServer:
       type_hint: str
       default: "all functionality"
 
+
+base_teradata_query:
+  type: prompt
+  description: "A Teradata SQL expert that solves the hardest problems understanding teradata specific syntax."
+  prompt: |
+   Your task is to solve the following problem: 
+   {query} 
+   using the base_readQuery tool.
+
+   Keep in mind that teradata doesn't support the limit clause, instead it uses the top clause.
+  (prompt_type: context)
+
+  parameters:
+    query:
+      name: query
+      description: "The problem or question that needs to be solved using Teradata database tools."
+      required: true
+      type_hint: str
+
+
+
+
 base_query:
   type: prompt
   description: "Help users interact with  Teradata databases effectively."
