@@ -55,44 +55,41 @@ base_teradataQuery:
   type: prompt
   description: "A Teradata SQL expert that effectively solves problems understanding teradata specific SQL syntax."
   prompt: |
-   Your task is to solve the following problem: 
-   {query} 
-   using the base_readQuery tool.
-
-    When converting SQLAlchemy-generated SQL to Teradata SQL, apply these rules:
-
-    1. Boolean literals:
-      - SQLAlchemy: "true" / "false"
-      - Teradata: use 1 / 0 (or 'Y' / 'N' depending on schema)
-
-    2. LIMIT / OFFSET:
-      - SQLAlchemy: "LIMIT n OFFSET m"
-      - Teradata: use "TOP n" and/or "QUALIFY ROW_NUMBER() OVER (ORDER BY …) > m"
-
-    3. String concatenation:
-      - SQLAlchemy: "col1 || col2"
-      - Teradata: "CAST(col1 AS VARCHAR) || CAST(col2 AS VARCHAR)" (if not both string types)
-
-    4. Autoincrement / identity columns:
-      - SQLAlchemy: "AUTO_INCREMENT" or dialect equivalent
-      - Teradata: "GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1 …)"
-
-    5. Datetime functions:
-      - SQLAlchemy: "NOW()"
-      - Teradata: "CURRENT_TIMESTAMP"
-
-    6. Case-insensitive LIKE:
-      - SQLAlchemy: "ILIKE"
-      - Teradata: "UPPER(col) LIKE UPPER(pattern)"
-
-    7. Schema handling:
-      - SQLAlchemy: "schema.table"
-      - Teradata: interpret schema as database → "database.table"
-
-    8. Identifier quoting:
-      - SQLAlchemy: double quotes preserve case → "User"
-      - Teradata: unquoted identifiers are uppercased → USER
-        → Only quote if case-sensitive match is required.
+    Your task is to act as an Teradata expert SQL corrector/executor. You must correct the SQL query applying the provided conversion rules and execute it using the base_readQuery tool.
+      **The SQL to correct is:**  
+    {query} 
+  
+    **Conversion Rules:**
+      1. Boolean literals:
+        - Replace "true" with 1
+        - Replace "false" with 0
+        - If schema convention uses 'Y'/'N', replace accordingly.
+      
+      2. LIMIT / OFFSET:
+        - Replace "LIMIT n OFFSET m" with "QUALIFY ROW_NUMBER() OVER (ORDER BY …) > m" plus "TOP n"
+        - If only "LIMIT n" is used, replace with "TOP n"
+      
+      3. String concatenation:
+        - SQLAlchemy: "col1 || col2"
+        - Teradata: Use "col1 || col2" if both are string types
+        - Otherwise CAST non-strings to VARCHAR before concatenation
+      
+      4. Autoincrement / identity columns:
+        - Replace "AUTO_INCREMENT" or similar with:
+          "GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647)"
+      
+      5. Datetime functions:
+        - Replace "NOW()" with "CURRENT_TIMESTAMP"
+      
+      6. Case-insensitive LIKE:
+        - Replace "ILIKE" with "UPPER(col) LIKE UPPER(pattern)"
+      
+      7. Schema handling:
+        - Interpret "schema.table" as "database.table"
+      
+      8. Identifier quoting:
+        - Unquoted identifiers become uppercase
+        - Double quotes preserve case sensitivity
 
   parameters:
     query:
