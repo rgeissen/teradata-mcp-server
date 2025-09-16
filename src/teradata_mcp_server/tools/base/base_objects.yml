@@ -59,51 +59,47 @@ base_teradataQuery:
    {query} 
    using the base_readQuery tool.
 
-  When converting SQLAlchemy-generated SQL to Teradata SQL, apply these rules:
+    When converting SQLAlchemy-generated SQL to Teradata SQL, apply these rules:
 
-  1. Boolean literals:
-    - SQLAlchemy: "true" / "false"
-    - Teradata: use 1 / 0 (or 'Y' / 'N' depending on schema)
+    1. Boolean literals:
+      - SQLAlchemy: "true" / "false"
+      - Teradata: use 1 / 0 (or 'Y' / 'N' depending on schema)
 
-  2. LIMIT / OFFSET:
-    - SQLAlchemy: "LIMIT n OFFSET m"
-    - Teradata: use "TOP n" and/or "QUALIFY ROW_NUMBER() OVER (ORDER BY …) > m"
+    2. LIMIT / OFFSET:
+      - SQLAlchemy: "LIMIT n OFFSET m"
+      - Teradata: use "TOP n" and/or "QUALIFY ROW_NUMBER() OVER (ORDER BY …) > m"
 
-  3. String concatenation:
-    - SQLAlchemy: "col1 || col2"
-    - Teradata: "CAST(col1 AS VARCHAR) || CAST(col2 AS VARCHAR)" (if not both string types)
+    3. String concatenation:
+      - SQLAlchemy: "col1 || col2"
+      - Teradata: "CAST(col1 AS VARCHAR) || CAST(col2 AS VARCHAR)" (if not both string types)
 
-  4. Autoincrement / identity columns:
-    - SQLAlchemy: "AUTO_INCREMENT" or dialect equivalent
-    - Teradata: "GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1 …)"
+    4. Autoincrement / identity columns:
+      - SQLAlchemy: "AUTO_INCREMENT" or dialect equivalent
+      - Teradata: "GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1 …)"
 
-  5. Datetime functions:
-    - SQLAlchemy: "NOW()"
-    - Teradata: "CURRENT_TIMESTAMP"
+    5. Datetime functions:
+      - SQLAlchemy: "NOW()"
+      - Teradata: "CURRENT_TIMESTAMP"
 
-  6. Case-insensitive LIKE:
-    - SQLAlchemy: "ILIKE"
-    - Teradata: "UPPER(col) LIKE UPPER(pattern)"
+    6. Case-insensitive LIKE:
+      - SQLAlchemy: "ILIKE"
+      - Teradata: "UPPER(col) LIKE UPPER(pattern)"
 
-  7. Schema handling:
-    - SQLAlchemy: "schema.table"
-    - Teradata: interpret schema as database → "database.table"
+    7. Schema handling:
+      - SQLAlchemy: "schema.table"
+      - Teradata: interpret schema as database → "database.table"
 
-  8. Identifier quoting:
-    - SQLAlchemy: double quotes preserve case → "User"
-    - Teradata: unquoted identifiers are uppercased → USER
-      → Only quote if case-sensitive match is required.
+    8. Identifier quoting:
+      - SQLAlchemy: double quotes preserve case → "User"
+      - Teradata: unquoted identifiers are uppercased → USER
+        → Only quote if case-sensitive match is required.
 
-  (prompt_type: context)
-
-  parameters:
-    query:
-      name: query
-      description: "The problem or question that needs to be solved using Teradata SQL syntax."
-      required: true
-      type_hint: str
-
-
+    parameters:
+      query:
+        name: query
+        description: "The problem or question that needs to be solved using Teradata SQL syntax."
+        required: true
+        type_hint: str
 
 
 base_query:
