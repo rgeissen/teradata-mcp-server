@@ -90,7 +90,9 @@ base_teradataQuery:
       8. Identifier quoting:
         - Unquoted identifiers become uppercase
         - Double quotes preserve case sensitivity
-
+      
+      9. LISTAGG(DISTINCT ...)
+        - Teradata does not support LISTAGG(DISTINCT ...). Use a subquery with DISTINCT instead.
   parameters:
     query:
       name: query
