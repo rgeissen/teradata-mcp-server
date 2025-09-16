@@ -94,12 +94,12 @@ base_teradataQuery:
       - Teradata: unquoted identifiers are uppercased → USER
         → Only quote if case-sensitive match is required.
 
-    parameters:
-      query:
-        name: query
-        description: "The problem or question that needs to be solved using Teradata SQL syntax."
-        required: true
-        type_hint: str
+  parameters:
+    query:
+      name: query
+      description: "The problem or question that needs to be solved using Teradata SQL syntax."
+      required: true
+      type_hint: str
 
 
 base_query:
