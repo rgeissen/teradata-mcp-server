@@ -60,38 +60,42 @@ base_teradataQuery:
     {query} 
   
     **Conversion Rules:**
-      1. Boolean literals:
+      1. TOP clause:
+        - Always use "SELECT TOP n ..." to restrict rows
+        - Combine with QUALIFY for OFFSET handling when needed
+
+      2. Boolean literals:
         - Replace "true" with 1
         - Replace "false" with 0
         - If schema convention uses 'Y'/'N', replace accordingly.
-      
-      2. LIMIT / OFFSET:
+
+      3. LIMIT / OFFSET:
         - Replace "LIMIT n OFFSET m" with "QUALIFY ROW_NUMBER() OVER (ORDER BY …) > m" plus "TOP n"
         - If only "LIMIT n" is used, replace with "TOP n"
-      
-      3. String concatenation:
+
+      4. String concatenation:
         - SQLAlchemy: "col1 || col2"
         - Teradata: Use "col1 || col2" if both are string types
         - Otherwise CAST non-strings to VARCHAR before concatenation
-      
-      4. Autoincrement / identity columns:
+
+      5. Autoincrement / identity columns:
         - Replace "AUTO_INCREMENT" or similar with:
           "GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647)"
-      
-      5. Datetime functions:
+
+      6. Datetime functions:
         - Replace "NOW()" with "CURRENT_TIMESTAMP"
-      
-      6. Case-insensitive LIKE:
+
+      7. Case-insensitive LIKE:
         - Replace "ILIKE" with "UPPER(col) LIKE UPPER(pattern)"
-      
-      7. Schema handling:
+
+      8. Schema handling:
         - Interpret "schema.table" as "database.table"
-      
-      8. Identifier quoting:
+
+      9. Identifier quoting:
         - Unquoted identifiers become uppercase
         - Double quotes preserve case sensitivity
-      
-      9. LISTAGG(DISTINCT ...)
+
+      10. LISTAGG(DISTINCT ...)
         - Teradata does not support LISTAGG(DISTINCT ...). Use a subquery with DISTINCT instead.
   parameters:
     query:
