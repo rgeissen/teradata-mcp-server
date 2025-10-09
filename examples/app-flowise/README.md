@@ -34,7 +34,17 @@ Refer to the [Flowise client guide](./docs/client_guide/Flowise_with_teradata_mc
 
 5. Open Flowise at http://localhost:3000/.
 
-6. Shut down the stack:
+6. Quick Start
+   1. Create an administrator account
+   2. Click Agentflows>Add New
+   3. Add an agent
+      1. Select a LLM provider and model
+      2. Select Tools>Custom MCP
+      3. In *Custom MCP Parameters*, enter `{"url":"http://teradata-mcp-server:8001/mcp/"}`
+      4. Click "Refresh" and you should be able to see and select the tools under *Available Actions*
+      5. Build your flow, save and select the chat icon on top-right to test.
+
+7. Shut down the stack:
    ```bash
    docker compose down
    ```

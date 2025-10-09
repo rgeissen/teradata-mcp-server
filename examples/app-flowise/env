@@ -21,4 +21,4 @@ MCP_PATH=/mcp/
 PORT=3000
 CORS_ORIGINS=*
 IFRAME_ORIGINS=*
-DATA_DIR=".flowise"                            #Directory to store Flowise data - use current directory as default, change as needed
+DATA_DIR=".flowise"                                             #Directory to store Flowise data - use demoproject in current directory, with new name/path to create a new project

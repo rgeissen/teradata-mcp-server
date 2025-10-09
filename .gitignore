@@ -13,4 +13,4 @@ var/
 /# Only ignore root-level overrides
 /profiles.yml
 /*_objects.yml
-examples/app-flowise/.flowise
+examples/app-flowise/.*
