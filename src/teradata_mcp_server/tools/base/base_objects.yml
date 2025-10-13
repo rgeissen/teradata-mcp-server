@@ -61,7 +61,7 @@ base_teradataQuery:
   
     **Conversion Rules:**
       1. TOP clause:
-        - Always use "SELECT TOP n ..." to restrict rows
+        - Always use "SELECT TOP n ..." instead of "LIMIT n" to restrict rows
         - Combine with QUALIFY for OFFSET handling when needed
 
       2. Boolean literals:
