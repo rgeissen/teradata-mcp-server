@@ -3,7 +3,7 @@
 [![Teradata Agents](https://img.shields.io/badge/Teradata--Agents-Setup-green?style=for-the-badge&logo=teradata)](./flowise_teradata_agents/README.md)
 
 Use this example to locally test Flowise and the Teradata MCP server with recommended defaults. 
-Refer to the [Flowise client guide](./docs/client_guide/Flowise_with_teradata_mcp_Guide.md) for walkthrough and screenshots.
+Refer to the [Flowise client guide](../../docs/client_guide/Flowise_with_teradata_mcp_Guide.md) for walkthrough and screenshots.
 
 ## Prerequisites
 - Docker Engine with the compose plugin available locally
