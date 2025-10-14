@@ -4,7 +4,6 @@ services:
       context: .
       args:
         - ENABLE_FS_MODULE=${ENABLE_FS_MODULE:-false}
-        - ENABLE_EVS_MODULE=${ENABLE_EVS_MODULE:-false}
         - ENABLE_TDVS_MODULE=${ENABLE_TDVS_MODULE:-false}
         - ENABLE_TDML_MODULE=${ENABLE_TDML_MODULE:-false}
     image: teradata-mcp-server:latest
@@ -24,7 +23,6 @@ services:
       context: .
       args:
         - ENABLE_FS_MODULE=${ENABLE_FS_MODULE:-false}
-        - ENABLE_EVS_MODULE=${ENABLE_EVS_MODULE:-false}
         - ENABLE_TDVS_MODULE=${ENABLE_TDVS_MODULE:-false}
         - ENABLE_TDML_MODULE=${ENABLE_TDML_MODULE:-false}
     image: teradata-mcp-server:latest

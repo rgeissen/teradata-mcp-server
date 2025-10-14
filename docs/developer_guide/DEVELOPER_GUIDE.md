@@ -21,7 +21,7 @@ uv python install            # ensure a compatible Python is available
 uv sync                      # create venv and install project deps
 ```
 
-> Tip: add extras for full dev (feature store, EVS) if you use them:
+> Tip: add extras for full dev (feature store, tdvs) if you use them:
 ```bash
 uv sync --extra fs --extra tdvs
 ```
@@ -306,7 +306,7 @@ teradata-mcp-server/
    ├─ __init__.py                   # Package metadata + CLI entry main()
    ├─ __main__.py                   # Allows `python -m teradata_mcp_server`
    ├─ server.py                     # Slim entrypoint; parses CLI/env and runs app
-   ├─ app.py                        # App factory: logging, middleware, tools, YAML, EVS/EFS wiring
+   ├─ app.py                        # App factory: logging, middleware, tools, YAML, tdvs/EFS wiring
    ├─ utils.py                      # Logging setup, response formatting, config loaders
    ├─ middleware.py                 # Shared RequestContextMiddleware (stdio fast‑path + HTTP/SSE)
    ├─ config/                       # Packaged default profiles.yml
@@ -318,12 +318,12 @@ teradata-mcp-server/
       ├─ utils/
       │  ├─ __init__.py            # JSON helpers, auth header parsing, exports queryband
 +     │  └─ queryband.py           # Build Teradata QueryBand from request context
-      ├─ base/ ...                 # Tool groups (base, dba, sec, qlty, rag, fs, evs, ...)
-      └─ fs/evs/...                # Optional extras; imported only if profile enables them
+      ├─ base/ ...                 # Tool groups (base, dba, sec, qlty, rag, fs, tdvs, ...)
+      └─ fs/...                    # Optional extras; imported only if profile enables them
 ```
 
 Notes:
-- EFS (fs) and EVS (evs) modules are optional. They are loaded only if your profile enables tools with prefixes `fs_*` or `evs_*`. Missing dependencies result in a warning; the rest of the server continues to operate.
+- EFS (fs) and tdvs (tdvs) modules are optional. They are loaded only if your profile enables tools with prefixes `fs_*` or `tdvs_*`. Missing dependencies result in a warning; the rest of the server continues to operate.
 - Logging writes to a per‑user file location by default for HTTP/SSE transports; console logging is disabled for stdio to avoid polluting MCP protocol streams. Override with `LOG_DIR` or `NO_FILE_LOGS=1`.
     - Handles errors and response formatting
     - Reconnects when needed
