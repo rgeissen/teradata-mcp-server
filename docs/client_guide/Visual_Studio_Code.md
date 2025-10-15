@@ -25,7 +25,7 @@ export MCP_PATH=/mcp/
 uv run teradata-mcp-server
 ```
 
-Add the server in VS Code:
+#### Add the HTTP server in VS Code
 
 - Open the Command Palette (View>Command Palette)
 - select "MCP: Add Server"

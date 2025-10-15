@@ -10,6 +10,15 @@ This guide covers everything you need to deploy the Teradata MCP Server, from lo
 - **Production Deployment** - Remote deployment strategies for serving multiple clients
 - **Service Management** - Running as system services with automatic restart and monitoring
 
+## 🤔 What infrastructure do I need?
+
+The Teradata MCP server is lightweight and built on FastMCP, it is not intended to do heavy data transfer or data processing operations. 
+As an indication, base software fits in a 500MB container image, and takes the same memory footprint.
+
+The tested and supported OS are Linux, Windows and MacOS.
+
+You can find a [simple deployment example on AWS here](../../examples/server-deployment/quickstart-aws.md).
+
 ## 🤔 Which Installation Method?
 
 | Method | Best For | Pros | Cons | Setup Time |
