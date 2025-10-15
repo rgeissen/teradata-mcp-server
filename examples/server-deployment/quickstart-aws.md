@@ -111,7 +111,106 @@ For Claude desktop, you can use mcp-remote connect to your server.
 }
 ```
 
-If you have enabled basic authentication and setup a database proxy user, you may pass the database user credentials in the header:
+
+## 8) Configure HTTPS with Caddy
+
+If you are planning to expose the service over the public internet, you need to secure your MCP server communication with HTTPS.
+
+In this example, we will use [Caddy](https://caddyserver.com/docs/automatic-https?utm_source=chatgpt.com) as a reverse proxy, alternatively, you may use [ngix](https://nginx.org/en/docs/http/configuring_https_servers.html).
+
+ like and a free domain from **DuckDNS**. This guide reflects a working setup.
+
+### Prerequisites: Domain ownership and DNS
+
+When you enable HTTPS using Let’s Encrypt (which Caddy does automatically), the certificate authority needs to verify that you control the domain name in the URL.
+
+You also need to setup your DNS to resolve to the IP of the instance deployed above. 
+
+
+If you just want to want to quickly test the process, you may use a free dns service such as [https://www.duckDNS.org/](https://www.duckdns.org/). So you can create a new subdomain (e.g., `my-mcp-server.duckdns.org`) and point to your cloud instance's public IP address.
+
+### 1. Allow HTTPS inbound traffic
+
+Add a security rule to your EC2 security group to allow inbound traffic on port 443 (HTTPS).
+
+In the AWS Console, select your instance > **Security>Security Group > Edit inbound rules > Add rule**:  
+> Type=**HTTPS**; port **443** (default); source = **Anywhere-IPv4** (0.0.0.0/0).  
+
+
+### 2. Install Caddy
+
+The process below downloads and installs the static Caddy binary. You can also check on [the instal page](https://caddyserver.com/docs/install#install) if Caddy is distributed with your distribution's package manager.
+
+```bash
+curl -fsSL "https://github.com/caddyserver/caddy/releases/download/v2.6.4/caddy_2.6.4_linux_amd64_static" -o caddy
+sudo mv caddy /usr/local/bin/caddy
+sudo chmod +x /usr/local/bin/caddy
+```
+
+### 3. Setup Caddy user, directories, and configuration
+
+Create a dedicated user and directories for Caddy:
+
+```bash
+sudo useradd --system --home /var/lib/caddy --shell /usr/sbin/nologin caddy
+sudo mkdir -p /etc/caddy /var/lib/caddy /var/log/caddy
+sudo chown -R caddy:caddy /etc/caddy /var/lib/caddy /var/log/caddy
+```
+
+Create the Caddyfile configuration file at `/etc/caddy/Caddyfile` with the following content:
+
+```text
+mcp.your-domain.org {
+    encode gzip
+    reverse_proxy 127.0.0.1:8001
+}
+```
+
+Replace `mcp.your-domain.org` with your actual DNS domain (eg. `my-mcp-server.duckdns.org`).
+
+### 4. Create and enable the Caddy systemd service
+
+Create `/etc/systemd/system/caddy.service` with the following content:
+
+```ini
+[Unit]
+Description=Caddy web server
+After=network.target
+
+[Service]
+User=caddy
+Group=caddy
+ExecStart=/usr/local/bin/caddy run --environ --config /etc/caddy/Caddyfile
+ExecReload=/usr/local/bin/caddy reload --config /etc/caddy/Caddyfile
+Restart=on-failure
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Reload systemd and start Caddy:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now caddy
+```
+
+### 5. Verify HTTPS and update your client configuration
+
+**Confirm that `https://mcp.your-domain.org/mcp` loads successfully with a valid TLS certificate:**
+
+just pasting the address in a browser should return a JSON RPC error.
+
+**Claude Desktop config:**
+
+You can simply create a new **custom connector** with the HTTPS URL: **Settings>Connectors>Add Custom Connector**, give it a name and your https URL, that's it! You may have to restart Claude Desktop for the change to take effect.
+
+
+
+If you have enabled [basic authentication](../../docs/server_guide/SECURITY.md#basic-mode-details) and setup a database proxy user (eg. `https://mcp.your-domain.org/mcp/`), you may pass the database user credentials in the header.
+
+For this head to the **Settings>Developer** section and update your `claude_desktop_config.json` configuration
 
 ```json
 {
@@ -120,7 +219,7 @@ If you have enabled basic authentication and setup a database proxy user, you ma
       "command": "npx",
       "args": [
         "mcp-remote",
-        "http://<EC2_PUBLIC_IP>:8001/mcp/",
+        "https://your-domain.com/mcp/",
         "--header",
         "Authorization: Basic ${AUTH_TOKEN}",
         "--allow-http"
@@ -131,4 +230,18 @@ If you have enabled basic authentication and setup a database proxy user, you ma
     }
   }
 }
+```
+
+### 6. Close port 8001 publicly
+
+Once HTTPS is working, update your AWS security group to close port 8001 from public access to improve security.
+
+---
+
+### Troubleshooting tip
+
+DNS changes can take some time to propagate. If HTTPS does not work immediately, wait a few minutes and retry. Also, Let's Encrypt (used by Caddy) may need a short time to issue certificates on first run. Check Caddy logs with:
+
+```bash
+sudo journalctl -u caddy -f
 ```

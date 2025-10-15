@@ -171,6 +171,7 @@ For example, if using Keycloak or another OpenID Connect provider, a user could 
 ### Basic mode details
 
 :warning: **FEATURE CURRENTLY IN BETA**
+:warning: This will send your user database credentials over the network: ensure you use HTTPS encryption ([example here](../../examples/server-deployment/quickstart-aws.md#8-configure-https-with-caddy)).
 
 In `AUTH_MODE=basic`, the server accepts either `Basic` or `Bearer` headers.
 
