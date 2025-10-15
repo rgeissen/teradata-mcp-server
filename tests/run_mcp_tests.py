@@ -484,7 +484,6 @@ async def main():
         print("  python tests/run_mcp_tests.py 'uv run teradata-mcp-server'")
         print("  python tests/run_mcp_tests.py 'uv run teradata-mcp-server' tests/cases/core_test_cases.json")
         print("  python tests/run_mcp_tests.py 'uv run teradata-mcp-server' tests/cases/core_test_cases.json tests/cases/fs_test_cases.json")
-        print("  python tests/run_mcp_tests.py 'uv run teradata-mcp-server' tests/cases/evs_test_cases.json --verbose")
         sys.exit(1)
 
     server_command = sys.argv[1].split()

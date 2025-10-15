@@ -45,7 +45,7 @@ We recommend `uv` or `pipx` to install teradata-mcp-server as a CLI tool. They p
 uv tool install "teradata-mcp-server"
 
 # With optional Enterprise Feature Store and Vector Store
-uv tool install "teradata-mcp-server[fs,evs]"
+uv tool install "teradata-mcp-server[fs,tdvs]"
 ```
 
 If the tool's path isn't resolved add it to your shell using `uv tool update-shell` and restart the terminal.
@@ -60,7 +60,7 @@ python -m pipx ensurepath
 pipx install "teradata-mcp-server"
 
 # With optional Enterprise Feature Store and Vector Store
-pipx install "teradata-mcp-server[fs,evs]"
+pipx install "teradata-mcp-server[fs,tdvs]"
 ```
 
 ### Usage
@@ -176,7 +176,7 @@ pip install --upgrade pip
 pip install teradata-mcp-server
 
 # With enterprise features
-pip install "teradata-mcp-server[fs,evs]"
+pip install "teradata-mcp-server[fs,tdvs]"
 ```
 
 ### Usage

@@ -21,7 +21,6 @@ class ModuleLoader:
     MODULE_MAP = {
         'base': 'teradata_mcp_server.tools.base',
         'dba': 'teradata_mcp_server.tools.dba',
-        'evs': 'teradata_mcp_server.tools.evs',
         'fs': 'teradata_mcp_server.tools.fs',
         'qlty': 'teradata_mcp_server.tools.qlty',
         'rag': 'teradata_mcp_server.tools.rag',
@@ -63,10 +62,6 @@ class ModuleLoader:
                     required_modules.add(prefix)
                     logger.info(f"Pattern '{pattern}' matches module '{prefix}'")
 
-        # Add EVS connection if EVS tools are needed
-        if 'evs' in required_modules:
-            required_modules.add('evs_connect')
-
         self._required_modules = required_modules
         return list(required_modules)
 
@@ -100,12 +95,6 @@ class ModuleLoader:
                 self._loaded_modules['td_connect'] = td_connect
                 logger.info("Loaded td_connect module")
                 return td_connect
-            elif module_name == 'evs_connect':
-                # Use absolute import to avoid circular dependency
-                evs_connect = importlib.import_module('teradata_mcp_server.tools.evs_connect')
-                self._loaded_modules['evs_connect'] = evs_connect
-                logger.info("Loaded evs_connect module")
-                return evs_connect
             else:
                 logger.warning(f"Unknown module: {module_name}")
                 return None
@@ -121,11 +110,6 @@ class ModuleLoader:
                     logger.warning("Feature Store module not available - required packages not installed. Install with: uv sync --extra fs or pip install -e .[fs]")
                 else:
                     logger.warning("Feature Store module not available - module missing or packages not installed. Install with: uv sync --extra fs or pip install -e .[fs]")
-            elif module_name == 'evs':
-                if 'teradatagenai' in error_msg:
-                    logger.warning("Enterprise Vector Store module not available - required packages not installed. Install with: uv sync --extra evs or pip install -e .[evs]")
-                else:
-                    logger.warning("Enterprise Vector Store module not available - module missing or packages not installed. Install with: uv sync --extra evs or pip install -e .[evs]")
             else:
                 logger.error(f"Failed to load module {module_name}: {e}")
             return None

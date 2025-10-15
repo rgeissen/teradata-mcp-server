@@ -37,10 +37,7 @@ fs = [
     "teradataml>=20.0.0.7",
     "tdfs4ds>=0.2.4.0",
 ]
-# Enterprise Vector Store functionality  
-evs = [
-    "teradatagenai>=20.0.0.0",
-]
+
 # Teradata Vector Store functionality
 tdvs = [
     "teradatagenai>=20.0.0.3"

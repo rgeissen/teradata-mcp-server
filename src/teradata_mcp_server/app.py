@@ -60,7 +60,6 @@ def create_mcp_app(settings: Settings):
 
     # Feature flags from profiles
     enableEFS = True if any(re.match(pattern, 'fs_*') for pattern in config.get('tool', [])) else False
-    enableEVS = True if any(re.match(pattern, 'evs_*') for pattern in config.get('tool', [])) else False
     enableTDVS = True if any(re.match(pattern, 'tdvs_*') for pattern in config.get('tool', [])) else False
 
     # Initialize TD connection and optional teradataml/EFS context
@@ -96,15 +95,6 @@ def create_mcp_app(settings: Settings):
             logger.warning(f"Analytic functions are not available.")
             enableEFS = False
 
-    # EVS connection (optional)
-    evs = None
-    if len(os.getenv("VS_NAME", "").strip()) > 0:
-        try:
-            evs = td.get_evs()
-            enableEVS = True
-        except Exception as e:
-            logger.error(f"Unable to establish connection to EVS, disabling: {e}")
-            enableEVS = False
             
     # TeradataVectorStore connection (optional)
     tdvs = None
