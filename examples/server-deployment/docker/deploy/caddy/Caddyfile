@@ -1,0 +1,31 @@
+{$DOMAIN} {
+    # For local testing: use self-signed certificates
+    # For production: comment out 'tls internal' and uncomment the ACME block below
+    tls internal
+
+    # Production ACME configuration (uncomment when deploying to public server):
+    # tls {
+    #     issuer acme {
+    #         disable_tlsalpn_challenge    # force HTTP-01 on port 80
+    #     }
+    # }
+
+    encode gzip
+
+    @mcp {
+        path /mcp /mcp/ /mcp/*
+    }
+    handle @mcp {
+        reverse_proxy http://mcp:8001
+    }
+
+    handle /favicon.ico {
+        root * /srv/site
+        header Cache-Control "public, max-age=86400, immutable"
+        file_server
+    }
+    handle {
+        root * /srv/site
+        file_server
+    }
+}
