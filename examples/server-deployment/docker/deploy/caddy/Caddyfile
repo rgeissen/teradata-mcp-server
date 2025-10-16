@@ -1,14 +1,10 @@
 {$DOMAIN} {
-    # For local testing: use self-signed certificates
-    # For production: comment out 'tls internal' and uncomment the ACME block below
-    tls internal
-
-    # Production ACME configuration (uncomment when deploying to public server):
-    # tls {
-    #     issuer acme {
-    #         disable_tlsalpn_challenge    # force HTTP-01 on port 80
-    #     }
-    # }
+    tls {
+        issuer acme {
+            disable_tlsalpn_challenge    # force HTTP-01 on port 80
+            # ca https://acme-staging-v02.api.letsencrypt.org/directory  # optional during testing
+        }
+    }
 
     encode gzip
 
