@@ -47,8 +47,12 @@ cd teradata-mcp-service
  
 ## 2) `.env` — runtime configuration
  
-Update the `.env` file with your database connection string for `DATABASE_URI` and domain name for `DOMAIN`:
- 
+Copy the `env` file to `.env` and edit it to update your database connection string for `DATABASE_URI` and domain name for `DOMAIN`:
+
+```bash
+cp env .env
+```
+
 ```dotenv
 # --- MCP server (FastMCP) ---
 DATABASE_URI=teradata://USER:PASS@HOST:1025/DEFAULT_DB_SCHEMA   # <-- Update here 
@@ -65,13 +69,11 @@ DOMAIN=teradata-mcp.duckdns.org                                 # <-- Update her
  
 ---
  
-## 3) (Optional) landing page / favicon
+## 3) (Optional) landing page
  
-Add files under `examples/server-deployment/docker/site/` if you want a root page or custom icon:
- 
-- Update `favicon.ico` and `favicon.png` with your preferred icon
-- Update `index.html` (minimal example)
-  
+You can update or add files under `examples/server-deployment/docker/site/` to customize the landing page. 
+The current setup indicates that the server is running and points the viewer to the client tool setup documentation.
+
 ---
  
 ## 4) Start the stack
@@ -79,7 +81,7 @@ Add files under `examples/server-deployment/docker/site/` if you want a root pag
 From your directory:
  
 ```bash
-docker compose up -d --build
+docker compose up -d --remove-orphans
 docker compose ps
 ```
  
@@ -91,7 +93,7 @@ docker compose logs -f caddy
  
 ---
  
-## 7) Verify
+## 5) Verify
  
 ```bash
 # Expect 200/401/405 from the app (not HTML)
@@ -105,7 +107,7 @@ If you added a landing page: visit `https://${DOMAIN}/`.
  
 ---
  
-## 8) Use with Claude Desktop
+## 6) Use with Claude Desktop
  
 With HTTPS you **do not** need `--allow-http`:
  
@@ -124,11 +126,11 @@ Add headers if you enforce auth at the app or proxy (e.g., `--header "Authorizat
  
 ---
  
-## 9) Operations
+## 7) Operations
  
 ```bash
 # Update/recreate
-docker compose pull && docker compose up -d --build
+docker compose pull && docker compose up -d --remove-orphans --build
  
 # Logs
 docker compose logs -f mcp
@@ -143,11 +145,10 @@ docker compose down
 ## 10) Troubleshooting
  
 - **TLS errors right after deploy** → DNS propagation or first ACME run; retry in a minute and check `docker compose logs -f caddy`.
-- **HTML/404 served at `/mcp/`** → ensure the `@mcp` matcher appears *before* the static handlers in `Caddyfile`.
 - **80/443 blocked** → open in Security Group / firewall; confirm public IPv4 resolves for `${DOMAIN}`.
-- **Icon still shows DuckDNS duck** → Claude may brand by base domain (`duckdns.org`). Use your own domain to fully customize.
  
 ---
  
-**That’s it.** You now have a clean, HTTPS-protected MCP server via Docker Compose with Caddy.
+**That’s it.** You now have a HTTPS-protected MCP server via Docker Compose with Caddy.
+
 -----

@@ -42,7 +42,7 @@ services:
       mcp:
         condition: service_healthy
     environment:
-      # Set this to your DuckDNS (or real) domain, e.g. teradata-mcp.duckdns.org
+      # Set this to your (sub.)domain, e.g. mcp.teradata.org and ensure DNS points to this server
       - DOMAIN=${DOMAIN}
     ports:
       - "80:80"

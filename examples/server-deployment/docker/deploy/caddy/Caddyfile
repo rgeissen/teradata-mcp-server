@@ -46,6 +46,7 @@
     }
     handle {
         root * /srv/site
+        templates
         file_server
     }
 }
