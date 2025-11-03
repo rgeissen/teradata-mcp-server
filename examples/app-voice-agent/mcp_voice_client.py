@@ -16,7 +16,7 @@ from aws_sdk_bedrock_runtime.models import BidirectionalInputPayloadPart, Invoke
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import load_mcp_tools
 from langchain_mcp_adapters.prompts import load_mcp_prompt
-from smithy_aws_core.credentials_resolvers.environment import EnvironmentCredentialsResolver
+from smithy_aws_core.identity.environment import EnvironmentCredentialsResolver
 
 # Suppress warnings
 warnings.filterwarnings("ignore")
@@ -554,8 +554,6 @@ class BedrockStreamManager:
             endpoint_uri=f"https://bedrock-runtime.{self.region}.amazonaws.com",
             region=self.region,
             aws_credentials_identity_resolver=EnvironmentCredentialsResolver(),
-            http_auth_scheme_resolver=HTTPAuthSchemeResolver(),
-            http_auth_schemes={"aws.auth#sigv4": SigV4AuthScheme()}
         )
         self.bedrock_client = BedrockRuntimeClient(config=config)
 

@@ -13,20 +13,23 @@ Refer to the [Flowise client guide](../../docs/client_guide/Flowise_with_teradat
 ## Quick start
 1. From the repo root run:
    ```bash
-   cd examples/app-flowise
-   cp env .env   
+   # Build the MCP serer docker image (set the ENABLE_FS_MODULE / ENABLE_TDVS_MODULE / ENABLE_TDML_MODULE environment variables to true to enable optional modules)
+   docker compose build
+   # Go to the Flowise stack directory (this) and set the configuration
+   cd examples/app-flowise    
+   cp env .env                
    ```
 
-2. Optional: Edit and update the `.env` file with your preferred configuration details. 
+1. Optional: Edit and update the `.env` file with your preferred configuration details. 
    If you don't the Teradata connection details will be inherited from your current environment variables, at least the DATABASE_URI variable is required.
 
-3. Launch the stack with docker compose (this will build MCP server image from `../Dockerfile`):
+2. Launch the stack with docker compose (this will build MCP server image from `../Dockerfile`):
 :
    ```bash
    export DATABASE_URI=teradata://username:password@host:1025  # Optional - ignore if you have already defined it in your .env file or current profile
    docker compose --env-file .env up  -d --remove-orphans
    ```
-4. Optional: monitor the logs
+1. Optional: monitor the logs
    ```bash
    docker logs teradata-mcp-server -f
    docker logs flowise -f
