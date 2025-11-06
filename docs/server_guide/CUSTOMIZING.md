@@ -130,7 +130,7 @@ Each entry in the YAML file is keyed by its name and must specify a `type`. Supp
   - `type`: Must be `tool`
   - `sql`: SQL query string (it can be a prepared statement with parameters)
 - **Optional:**
-  - `parameters`: Dictionary of parameter name (key) and definitions (value) - if used in the sql
+  - `parameters`: Dictionary of parameter name (key) and properties (dictionary with `description`, `default`, `type_hint`}) - if used in the sql
   - `description`: Text description of the tool
 
 #### Cube
@@ -141,7 +141,8 @@ Each entry in the YAML file is keyed by its name and must specify a `type`. Supp
   - `measures`: Dictionary of measure definitions (each with `expression`)
 - **Optional:**
   - `description`: Text description of the cube
-
+  - `parameters`: Dictionary of parameter name (key) and properties (dictionary with `description`, `default`, `type_hint`}) - if used in the sql
+  
 #### Prompt
 - **Required:**
   - `type`: Must be `prompt`
