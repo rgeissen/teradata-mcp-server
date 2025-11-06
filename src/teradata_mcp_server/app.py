@@ -418,7 +418,7 @@ def create_mcp_app(settings: Settings):
         annotations = {}
         for param_name, p in param_defs.items():
             type_hint = p.get("type_hint", str)
-            default = inspect.Parameter.empty if p.get("required", True) else p.get("default", None)
+            default = p.get("default", inspect.Parameter.empty)  # inspect.Parameter.empty if p.get("required", True) else p.get("default", None)
             parameters.append(
                 inspect.Parameter(param_name, kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default=default, annotation=type_hint)
             )
@@ -433,6 +433,9 @@ def create_mcp_app(settings: Settings):
         _dynamic_tool.__annotations__ = annotations
         return mcp.tool(name=name, description=tool.get("description", ""))(_dynamic_tool)
 
+    """
+    Generate a SQL generation function that returns a query string for a given cube definition and tool parameters (grain, measures, filters...).
+    """
     def generate_cube_query_tool(name, cube):
         """
         Generate a function to create aggregation SQL from a cube definition.
@@ -482,7 +485,7 @@ def create_mcp_app(settings: Settings):
                 f"  {dim_list}{dim_comma}"
                 f"  {meas_list}\n"
                 "FROM (\n"
-                f"{cube['sql'].strip()}\n"
+                f"sel * from ({cube['sql'].strip()}) a \n"
                 f"{where_dim_clause}"
                 ") AS c\n"
                 f"GROUP BY {', '.join(dim_list_raw)}"
@@ -495,19 +498,53 @@ def create_mcp_app(settings: Settings):
         return _cube_query_tool
 
     def make_custom_cube_tool(name, cube):
-        async def _dynamic_tool(dimensions, measures, dim_filters="", meas_filters="", order_by="", top=None):
-            # Accept dimensions and measures as comma-separated strings, parse to lists
-            return execute_db_tool(
-                td.util_base_dynamicQuery,
-                sql_generator=generate_cube_query_tool(name, cube),
-                dimensions=dimensions,
-                measures=measures,
-                dim_filters=dim_filters,
-                meas_filters=meas_filters,
-                order_by=order_by,
-                top=top
+        param_defs = cube.get("parameters", {})
+        parameters = []
+        annotations = {}
+        for param_name, p in param_defs.items():
+            type_hint = p.get("type_hint", str)
+            default = p.get("default", inspect.Parameter.empty)  # inspect.Parameter.empty if p.get("required", True) else p.get("default", None)
+            parameters.append(
+                inspect.Parameter(param_name, kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default=default, annotation=type_hint)
             )
+            annotations[param_name] = type_hint
+
+        async def _dynamic_tool(dimensions, measures, dim_filters="", meas_filters="", order_by="", top=None, **kwargs):
+            # Check for missing parameters, if defined (TODO: skip for optional params with defaults)
+            missing = [n for n in annotations if n not in kwargs]
+            if missing:
+                raise ValueError(f"Missing parameters: {missing}")
+            sql_generator=generate_cube_query_tool(name, cube)
+            return execute_db_tool(
+                td.handle_base_readQuery,
+                sql=sql_generator(
+                    dimensions=dimensions,
+                    measures=measures,
+                    dim_filters=dim_filters,
+                    meas_filters=meas_filters,
+                    order_by=order_by,
+                    top=top
+                ),
+                tool_name=name,
+                **kwargs
+            )
+
+        # Get existing parameters for _dynamic_tool (except **kwargs) and combine with cube parameters if any
+        existing_params = [p for p in inspect.signature(_dynamic_tool).parameters.values() if p.kind != inspect.Parameter.VAR_KEYWORD]
+
+        # Separate required (no default) and optional (with default) parameters
+        all_params = existing_params + parameters
+        required_params = [p for p in all_params if p.default is inspect.Parameter.empty]
+        optional_params = [p for p in all_params if p.default is not inspect.Parameter.empty]
+
+        # Combine: required first, then optional (Python requirement)
+        sig = inspect.Signature(required_params + optional_params)
+        _dynamic_tool.__signature__ = sig
+
+        # Merge annotations for _dynamic_tool and cube parameters
+        _dynamic_tool.__annotations__ = {**_dynamic_tool.__annotations__, **annotations}
         _dynamic_tool.__name__ = 'get_cube_' + name
+
         # Build allowed values and definitions for dimensions and measures
         dim_lines = []
         for n, d in cube.get('dimensions', {}).items():
