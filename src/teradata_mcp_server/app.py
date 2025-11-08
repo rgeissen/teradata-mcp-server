@@ -15,6 +15,7 @@ High-level architecture:
   signatures. The adapter injects a DB connection and sets QueryBand from the
   request context when using HTTP.
 """
+import asyncio
 import inspect
 import os
 import re
@@ -256,8 +257,9 @@ def create_mcp_app(settings: Settings):
             if p.annotation is not inspect._empty:
                 annotations[name] = p.annotation
 
-        def _exec(*args, **kwargs):
-            return execute_db_tool(func, **inject_kwargs, **kwargs)
+        async def _exec(*args, **kwargs):
+            merged_kwargs = {**inject_kwargs, **kwargs}
+            return await asyncio.to_thread(execute_db_tool, func, **merged_kwargs)
 
         _exec.__name__ = getattr(func, "__name__", "wrapped_tool")
         _exec.__signature__ = new_sig
