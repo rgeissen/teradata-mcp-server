@@ -42,6 +42,12 @@ fs = [
 tdvs = [
     "teradatagenai>=20.0.0.3"
 ]
+
+# BAR (Backup and Restore) functionality
+bar = [
+    "requests>=2.25.0",
+]
+
 # Development dependencies 
 dev = [
     "ruff>=0.1.0",

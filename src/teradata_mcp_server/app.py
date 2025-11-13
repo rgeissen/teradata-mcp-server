@@ -63,6 +63,7 @@ def create_mcp_app(settings: Settings):
     # Feature flags from profiles
     enableEFS = True if any(re.match(pattern, 'fs_*') for pattern in config.get('tool', [])) else False
     enableTDVS = True if any(re.match(pattern, 'tdvs_*') for pattern in config.get('tool', [])) else False
+    enableBAR = True if any(re.match(pattern, 'bar_*') for pattern in config.get('tool', [])) else False
 
     # Initialize TD connection and optional teradataml/EFS context
     # Pass settings object to TDConn instead of just connection_url
@@ -107,6 +108,25 @@ def create_mcp_app(settings: Settings):
         except Exception as e:
             logger.error(f"Unable to establish connection to Teradata Vector Store, disabling: {e}")
             enableTDVS = False
+
+    # BAR (Backup and Restore) system dependencies (optional)
+    if enableBAR:
+        try:
+            # Check for BAR system availability by importing required modules
+            import requests
+            from teradata_mcp_server.tools.bar.dsa_client import DSAClient
+            # Verify DSA connection if environment variables are set
+            dsa_base_url = os.getenv("DSA_BASE_URL")
+            dsa_host = os.getenv("DSA_HOST")
+            dsa_port = os.getenv("DSA_PORT")
+            if dsa_base_url or (dsa_host and dsa_port):
+                logger.info("BAR system configured with DSA connection")
+            else:
+                logger.warning("BAR tools enabled but DSA connection not configured (missing DSA_BASE_URL or DSA_HOST/DSA_PORT) - disabling BAR functionality")
+                enableBAR = False
+        except (AttributeError, ImportError, ModuleNotFoundError) as e:
+            logger.warning(f"BAR system dependencies not available - disabling BAR functionality: {e}")
+            enableBAR = False
 
     # Middleware (auth + request context)
     from teradata_mcp_server.tools.auth_cache import SecureAuthCache
@@ -278,9 +298,14 @@ def create_mcp_app(settings: Settings):
             tool_name = name[len("handle_"):]
             if not any(re.match(p, tool_name) for p in config.get('tool', [])):
                 continue
+            # Skip BAR tools if BAR functionality is disabled
+            if tool_name.startswith("bar_") and not enableBAR:
+                logger.info(f"Skipping BAR tool: {tool_name} (BAR functionality disabled)")
+                continue
             wrapped = make_tool_wrapper(func)
             mcp.tool(name=tool_name, description=wrapped.__doc__)(wrapped)
             logger.info(f"Created tool: {tool_name}")
+            logger.debug(f"Tool Docstring: {wrapped.__doc__}")
     else:
         logger.warning("No module loader available, skipping code-defined tool registration")
 
@@ -587,7 +612,7 @@ def create_mcp_app(settings: Settings):
         Returns:
             Query result as a formatted response.
         """
-        return mcp.tool(description=_dynamic_tool.__doc__)(_dynamic_tool)
+        return mcp.tool(name=name, description=_dynamic_tool.__doc__)(_dynamic_tool)
 
     # Register custom objects
     custom_terms: list[tuple[str, Any, str]] = []
