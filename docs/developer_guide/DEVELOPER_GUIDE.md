@@ -33,7 +33,7 @@ uv run teradata-mcp-server --profile all
 
 ### 4) MCP Inspector (interactive testing)
 ```bash
-uv run mcp dev ./src/teradata_mcp_server/server.py
+npx modelcontextprotocol/inspector uv run teradata-mcp-server
 ```
 
 ### 5) Run tests

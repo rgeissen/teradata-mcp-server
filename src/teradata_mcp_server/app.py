@@ -15,6 +15,7 @@ High-level architecture:
   signatures. The adapter injects a DB connection and sets QueryBand from the
   request context when using HTTP.
 """
+import asyncio
 import inspect
 import os
 import re
@@ -245,6 +246,63 @@ def create_mcp_app(settings: Settings):
             logger.error(f"Error in execute_db_tool: {e}", exc_info=True, extra={"session_info": {"tool_name": tool_name}})
             return format_error_response(str(e))
 
+    def create_mcp_tool(
+        *,
+        executor_func=None,
+        signature,
+        annotations=None,
+        inject_kwargs=None,
+        validate_required=False,
+        tool_name="mcp_tool",
+        tool_description=None,
+    ):
+        """
+        Unified factory for creating async MCP tool functions.
+
+        All tool functions use asyncio.to_thread to execute blocking database operations.
+
+        Args:
+            executor_func: Callable that will be executed. Should be a function that
+                          calls execute_db_tool with appropriate arguments.
+            signature: The inspect.Signature for the MCP tool function.
+            annotations: Dict of parameter annotations for type hints.
+            inject_kwargs: Dict of kwargs to inject when calling executor_func.
+            validate_required: Whether to validate required parameters are present.
+            tool_name: Name to assign to the MCP tool function.
+            tool_description: Description/docstring for the MCP tool function.
+
+        Returns:
+            An async function suitable for use as an MCP tool.
+        """
+        inject_kwargs = inject_kwargs or {}
+        annotations = annotations or {}
+
+        if validate_required:
+            # Build list of required parameter names (those without defaults)
+            required_params = [
+                name for name, param in signature.parameters.items()
+                if param.default is inspect.Parameter.empty
+            ]
+
+            async def _mcp_tool(**kwargs):
+                missing = [n for n in required_params if n not in kwargs]
+                if missing:
+                    raise ValueError(f"Missing required parameters: {missing}")
+                merged_kwargs = {**inject_kwargs, **kwargs}
+                return await asyncio.to_thread(executor_func, **merged_kwargs)
+        else:
+            async def _mcp_tool(**kwargs):
+                merged_kwargs = {**inject_kwargs, **kwargs}
+                return await asyncio.to_thread(executor_func, **merged_kwargs)
+
+        _mcp_tool.__name__ = tool_name
+        _mcp_tool.__signature__ = signature
+        _mcp_tool.__doc__ = tool_description
+        if annotations:
+            _mcp_tool.__annotations__ = annotations
+
+        return _mcp_tool
+
     def make_tool_wrapper(func):
         """Create an MCP-facing wrapper for a handle_* function.
 
@@ -276,15 +334,19 @@ def create_mcp_app(settings: Settings):
             if p.annotation is not inspect._empty:
                 annotations[name] = p.annotation
 
-        def _exec(*args, **kwargs):
-            return execute_db_tool(func, **inject_kwargs, **kwargs)
+        # Create executor function that will be run in thread
+        def executor(**kwargs):
+            return execute_db_tool(func, **kwargs)
 
-        _exec.__name__ = getattr(func, "__name__", "wrapped_tool")
-        _exec.__signature__ = new_sig
-        _exec.__doc__ = func.__doc__
-        if annotations:
-            _exec.__annotations__ = annotations
-        return _exec
+        return create_mcp_tool(
+            executor_func=executor,
+            signature=new_sig,
+            annotations=annotations,
+            inject_kwargs=inject_kwargs,
+            validate_required=False,
+            tool_name=getattr(func, "__name__", "wrapped_tool"),
+            tool_description=func.__doc__,
+        )
 
     # Register code tools via module loader
     module_loader = td.initialize_module_loader(config)
@@ -295,6 +357,10 @@ def create_mcp_app(settings: Settings):
                 continue
             tool_name = name[len("handle_"):]
             if not any(re.match(p, tool_name) for p in config.get('tool', [])):
+                continue
+            # Skip template tools (used for developer reference only)
+            if tool_name.startswith("tmpl_"):
+                logger.debug(f"Skipping template tool: {tool_name}")
                 continue
             # Skip BAR tools if BAR functionality is disabled
             if tool_name.startswith("bar_") and not enableBAR:
@@ -443,21 +509,29 @@ def create_mcp_app(settings: Settings):
         annotations = {}
         for param_name, p in param_defs.items():
             type_hint = p.get("type_hint", str)
-            default = inspect.Parameter.empty if p.get("required", True) else p.get("default", None)
+            default = p.get("default", inspect.Parameter.empty)  # inspect.Parameter.empty if p.get("required", True) else p.get("default", None)
             parameters.append(
                 inspect.Parameter(param_name, kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default=default, annotation=type_hint)
             )
             annotations[param_name] = type_hint
         sig = inspect.Signature(parameters)
-        async def _dynamic_tool(**kwargs):
-            missing = [n for n in annotations if n not in kwargs]
-            if missing:
-                raise ValueError(f"Missing parameters: {missing}")
-            return execute_db_tool(td.handle_base_readQuery, tool["sql"], tool_name=name, **kwargs)
-        _dynamic_tool.__signature__ = sig
-        _dynamic_tool.__annotations__ = annotations
-        return mcp.tool(name=name, description=tool.get("description", ""))(_dynamic_tool)
 
+        # Create executor function that will be run in thread
+        def executor(**kwargs):
+            return execute_db_tool(td.handle_base_readQuery, tool["sql"], tool_name=name, **kwargs)
+
+        tool_func = create_mcp_tool(
+            executor_func=executor,
+            signature=sig,
+            annotations=annotations,
+            validate_required=True,
+            tool_name=name,
+        )
+        return mcp.tool(name=name, description=tool.get("description", ""))(tool_func)
+
+    """
+    Generate a SQL generation function that returns a query string for a given cube definition and tool parameters (grain, measures, filters...).
+    """
     def generate_cube_query_tool(name, cube):
         """
         Generate a function to create aggregation SQL from a cube definition.
@@ -507,7 +581,7 @@ def create_mcp_app(settings: Settings):
                 f"  {dim_list}{dim_comma}"
                 f"  {meas_list}\n"
                 "FROM (\n"
-                f"{cube['sql'].strip()}\n"
+                f"sel * from ({cube['sql'].strip()}) a \n"
                 f"{where_dim_clause}"
                 ") AS c\n"
                 f"GROUP BY {', '.join(dim_list_raw)}"
@@ -520,60 +594,133 @@ def create_mcp_app(settings: Settings):
         return _cube_query_tool
 
     def make_custom_cube_tool(name, cube):
-        async def _dynamic_tool(dimensions, measures, dim_filters="", meas_filters="", order_by="", top=None):
-            # Accept dimensions and measures as comma-separated strings, parse to lists
-            return execute_db_tool(
-                td.util_base_dynamicQuery,
-                sql_generator=generate_cube_query_tool(name, cube),
-                dimensions=dimensions,
-                measures=measures,
-                dim_filters=dim_filters,
-                meas_filters=meas_filters,
-                order_by=order_by,
-                top=top
+        param_defs = cube.get("parameters", {})
+        parameters = []
+        annotations = {}
+        for param_name, p in param_defs.items():
+            type_hint = p.get("type_hint", str)
+            default = p.get("default", inspect.Parameter.empty)  # inspect.Parameter.empty if p.get("required", True) else p.get("default", None)
+            parameters.append(
+                inspect.Parameter(param_name, kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default=default, annotation=type_hint)
             )
-        _dynamic_tool.__name__ = 'get_cube_' + name
+            annotations[param_name] = type_hint
+
+        # Build the combined signature: fixed cube parameters + custom parameters
+        # Fixed cube parameters
+        cube_params = [
+            inspect.Parameter("dimensions", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=str),
+            inspect.Parameter("measures", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=str),
+            inspect.Parameter("dim_filters", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default="", annotation=str),
+            inspect.Parameter("meas_filters", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default="", annotation=str),
+            inspect.Parameter("order_by", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default="", annotation=str),
+            inspect.Parameter("top", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default=None, annotation=int),
+        ]
+
+        # Separate required and optional custom parameters
+        all_params = cube_params + parameters
+        required_params = [p for p in all_params if p.default is inspect.Parameter.empty]
+        optional_params = [p for p in all_params if p.default is not inspect.Parameter.empty]
+
+        # Combine: required first, then optional (Python requirement)
+        sig = inspect.Signature(required_params + optional_params)
+
+        # Build combined annotations
+        cube_annotations = {
+            "dimensions": str,
+            "measures": str,
+            "dim_filters": str,
+            "meas_filters": str,
+            "order_by": str,
+            "top": int,
+        }
+        all_annotations = {**cube_annotations, **annotations}
+
+        # Create executor function that will be run in thread
+        def executor(dimensions, measures, dim_filters="", meas_filters="", order_by="", top=None, **kwargs):
+            # Validate custom parameters
+            missing = [n for n in annotations if n not in kwargs]
+            if missing:
+                raise ValueError(f"Missing required parameters: {missing}")
+
+            sql_generator = generate_cube_query_tool(name, cube)
+            return execute_db_tool(
+                td.handle_base_readQuery,
+                sql=sql_generator(
+                    dimensions=dimensions,
+                    measures=measures,
+                    dim_filters=dim_filters,
+                    meas_filters=meas_filters,
+                    order_by=order_by,
+                    top=top
+                ),
+                tool_name=name,
+                **kwargs
+            )
+
         # Build allowed values and definitions for dimensions and measures
         dim_lines = []
         for n, d in cube.get('dimensions', {}).items():
-            dim_lines.append(f"    - {n}: {d.get('description', '')}")
+            dim_lines.append(f"\t\t- {n}: {d.get('description', '')}")
         measure_lines = []
         for n, m in cube.get('measures', {}).items():
-            measure_lines.append(f"    - {n}: {m.get('description', '')}")
-        
+            measure_lines.append(f"\t\t- {n}: {m.get('description', '')}")
+
+        # Build custom parameters documentation
+        custom_param_lines = []
+        for param_name, p in param_defs.items():
+            param_desc = p.get('description', '')
+            param_type = p.get('type_hint', str).__name__
+            is_required = p.get('default', inspect.Parameter.empty) is inspect.Parameter.empty
+            required_text = " (required)" if is_required else " (optional)"
+            custom_param_lines.append(f"    * {param_name} ({param_type}){required_text}: {param_desc}")
+
         # Create example strings for documentation
         dim_examples = [f"{d} {e}" for d, e in zip(list(cube.get('dimensions', {}))[:2], ["= 'value'", "in ('X', 'Y', 'Z')"])]
         dim_example = ' AND '.join(dim_examples)
-        
+
         meas_examples = [f"{m} {e}" for m, e in zip(list(cube.get('measures', {}))[:2], ["> 1000", "= 100"])]
         meas_example = ' AND '.join(meas_examples)
-        
+
         order_examples = [f"{d} {e}" for d, e in zip(list(cube.get('dimensions', {}))[:2], [" ASC", " DESC"])]
         order_example = ' , '.join(order_examples)
-        
-        _dynamic_tool.__doc__ = f"""
-        Tool to query the cube '{name}'.
-        {cube.get('description', '')}
 
-        Expected inputs:
-            * dimensions (str): Comma-separated dimension names to group by. Allowed values for dimensions\n:
-    {chr(10).join(dim_lines)}
+        # Build custom parameters section if there are any
+        custom_params_section = ""
+        if custom_param_lines:
+            custom_params_section = "\n" + chr(10).join(custom_param_lines) + "\n"
 
-            * measures (str): Comma-separated measure names to aggregate. Allowed values for measures:
-    {chr(10).join(measure_lines)}
+        doc_string = f"""
+{cube.get('description', '')}
+This is an OLAP cube tool that presents selected measures at a specified level of aggregation and filtering.
 
-            * dim_filters (str): Filter expression to apply to dimensions. Valid dimension names are: [{', '.join(cube.get('dimensions', {}).keys())}], use valid SQL expressions, for example:
-    "{dim_example}"
-            * meas_filters (str): Filter expression to apply to computed measures. Valid measure names are: [{', '.join(cube.get('measures', {}).keys())}], use valid SQL expressions, for example:
-    "{meas_example}"
-            * order_by (str): Order expression on any selected dimensions and measures. Use SQL syntax, for example:
-    "{order_example}"
-            top (int): Limit the number of rows returned, use a positive integer.
+Expected inputs:
+    * dimensions (str): Comma-separated dimension names to group by. Allowed values for dimensions\n:
+{chr(10).join(dim_lines)}
 
-        Returns:
-            Query result as a formatted response.
+    * measures (str): Comma-separated measure names to aggregate. Allowed values for measures:
+{chr(10).join(measure_lines)}
+
+    * dim_filters (str): Filter expression to apply to dimensions. Valid dimension names are: [{', '.join(cube.get('dimensions', {}).keys())}], use valid SQL expressions, for example:
+"{dim_example}"
+    * meas_filters (str): Filter expression to apply to computed measures. Valid measure names are: [{', '.join(cube.get('measures', {}).keys())}], use valid SQL expressions, for example:
+"{meas_example}"
+    * order_by (str): Order expression on any selected dimensions and measures. Use SQL syntax, for example:
+"{order_example}"
+    * top (int): Limit the number of rows returned, use a positive integer.
+{custom_params_section}
+Returns:
+    Query result as a formatted response.
         """
-        return mcp.tool(name=name, description=_dynamic_tool.__doc__)(_dynamic_tool)
+
+        tool_func = create_mcp_tool(
+            executor_func=executor,
+            signature=sig,
+            annotations=all_annotations,
+            validate_required=False,  # Validation happens inside executor for custom params
+            tool_name='get_cube_' + name,
+            tool_description=doc_string,
+        )
+        return mcp.tool(name=name, description=doc_string)(tool_func)
 
     # Register custom objects
     custom_terms: list[tuple[str, Any, str]] = []
