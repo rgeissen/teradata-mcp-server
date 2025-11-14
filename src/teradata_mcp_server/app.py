@@ -358,6 +358,10 @@ def create_mcp_app(settings: Settings):
             tool_name = name[len("handle_"):]
             if not any(re.match(p, tool_name) for p in config.get('tool', [])):
                 continue
+            # Skip template tools (used for developer reference only)
+            if tool_name.startswith("tmpl_"):
+                logger.debug(f"Skipping template tool: {tool_name}")
+                continue
             # Skip BAR tools if BAR functionality is disabled
             if tool_name.startswith("bar_") and not enableBAR:
                 logger.info(f"Skipping BAR tool: {tool_name} (BAR functionality disabled)")
@@ -656,10 +660,19 @@ def create_mcp_app(settings: Settings):
         # Build allowed values and definitions for dimensions and measures
         dim_lines = []
         for n, d in cube.get('dimensions', {}).items():
-            dim_lines.append(f"    - {n}: {d.get('description', '')}")
+            dim_lines.append(f"\t\t- {n}: {d.get('description', '')}")
         measure_lines = []
         for n, m in cube.get('measures', {}).items():
-            measure_lines.append(f"    - {n}: {m.get('description', '')}")
+            measure_lines.append(f"\t\t- {n}: {m.get('description', '')}")
+
+        # Build custom parameters documentation
+        custom_param_lines = []
+        for param_name, p in param_defs.items():
+            param_desc = p.get('description', '')
+            param_type = p.get('type_hint', str).__name__
+            is_required = p.get('default', inspect.Parameter.empty) is inspect.Parameter.empty
+            required_text = " (required)" if is_required else " (optional)"
+            custom_param_lines.append(f"    * {param_name} ({param_type}){required_text}: {param_desc}")
 
         # Create example strings for documentation
         dim_examples = [f"{d} {e}" for d, e in zip(list(cube.get('dimensions', {}))[:2], ["= 'value'", "in ('X', 'Y', 'Z')"])]
@@ -671,27 +684,32 @@ def create_mcp_app(settings: Settings):
         order_examples = [f"{d} {e}" for d, e in zip(list(cube.get('dimensions', {}))[:2], [" ASC", " DESC"])]
         order_example = ' , '.join(order_examples)
 
+        # Build custom parameters section if there are any
+        custom_params_section = ""
+        if custom_param_lines:
+            custom_params_section = "\n" + chr(10).join(custom_param_lines) + "\n"
+
         doc_string = f"""
-        Tool to query the cube '{name}'.
-        {cube.get('description', '')}
+{cube.get('description', '')}
+This is an OLAP cube tool that presents selected measures at a specified level of aggregation and filtering.
 
-        Expected inputs:
-            * dimensions (str): Comma-separated dimension names to group by. Allowed values for dimensions\n:
-    {chr(10).join(dim_lines)}
+Expected inputs:
+    * dimensions (str): Comma-separated dimension names to group by. Allowed values for dimensions\n:
+{chr(10).join(dim_lines)}
 
-            * measures (str): Comma-separated measure names to aggregate. Allowed values for measures:
-    {chr(10).join(measure_lines)}
+    * measures (str): Comma-separated measure names to aggregate. Allowed values for measures:
+{chr(10).join(measure_lines)}
 
-            * dim_filters (str): Filter expression to apply to dimensions. Valid dimension names are: [{', '.join(cube.get('dimensions', {}).keys())}], use valid SQL expressions, for example:
-    "{dim_example}"
-            * meas_filters (str): Filter expression to apply to computed measures. Valid measure names are: [{', '.join(cube.get('measures', {}).keys())}], use valid SQL expressions, for example:
-    "{meas_example}"
-            * order_by (str): Order expression on any selected dimensions and measures. Use SQL syntax, for example:
-    "{order_example}"
-            top (int): Limit the number of rows returned, use a positive integer.
-
-        Returns:
-            Query result as a formatted response.
+    * dim_filters (str): Filter expression to apply to dimensions. Valid dimension names are: [{', '.join(cube.get('dimensions', {}).keys())}], use valid SQL expressions, for example:
+"{dim_example}"
+    * meas_filters (str): Filter expression to apply to computed measures. Valid measure names are: [{', '.join(cube.get('measures', {}).keys())}], use valid SQL expressions, for example:
+"{meas_example}"
+    * order_by (str): Order expression on any selected dimensions and measures. Use SQL syntax, for example:
+"{order_example}"
+    * top (int): Limit the number of rows returned, use a positive integer.
+{custom_params_section}
+Returns:
+    Query result as a formatted response.
         """
 
         tool_func = create_mcp_tool(
