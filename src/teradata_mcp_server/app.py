@@ -246,6 +246,63 @@ def create_mcp_app(settings: Settings):
             logger.error(f"Error in execute_db_tool: {e}", exc_info=True, extra={"session_info": {"tool_name": tool_name}})
             return format_error_response(str(e))
 
+    def create_mcp_tool(
+        *,
+        executor_func=None,
+        signature,
+        annotations=None,
+        inject_kwargs=None,
+        validate_required=False,
+        tool_name="mcp_tool",
+        tool_description=None,
+    ):
+        """
+        Unified factory for creating async MCP tool functions.
+
+        All tool functions use asyncio.to_thread to execute blocking database operations.
+
+        Args:
+            executor_func: Callable that will be executed. Should be a function that
+                          calls execute_db_tool with appropriate arguments.
+            signature: The inspect.Signature for the MCP tool function.
+            annotations: Dict of parameter annotations for type hints.
+            inject_kwargs: Dict of kwargs to inject when calling executor_func.
+            validate_required: Whether to validate required parameters are present.
+            tool_name: Name to assign to the MCP tool function.
+            tool_description: Description/docstring for the MCP tool function.
+
+        Returns:
+            An async function suitable for use as an MCP tool.
+        """
+        inject_kwargs = inject_kwargs or {}
+        annotations = annotations or {}
+
+        if validate_required:
+            # Build list of required parameter names (those without defaults)
+            required_params = [
+                name for name, param in signature.parameters.items()
+                if param.default is inspect.Parameter.empty
+            ]
+
+            async def _mcp_tool(**kwargs):
+                missing = [n for n in required_params if n not in kwargs]
+                if missing:
+                    raise ValueError(f"Missing required parameters: {missing}")
+                merged_kwargs = {**inject_kwargs, **kwargs}
+                return await asyncio.to_thread(executor_func, **merged_kwargs)
+        else:
+            async def _mcp_tool(**kwargs):
+                merged_kwargs = {**inject_kwargs, **kwargs}
+                return await asyncio.to_thread(executor_func, **merged_kwargs)
+
+        _mcp_tool.__name__ = tool_name
+        _mcp_tool.__signature__ = signature
+        _mcp_tool.__doc__ = tool_description
+        if annotations:
+            _mcp_tool.__annotations__ = annotations
+
+        return _mcp_tool
+
     def make_tool_wrapper(func):
         """Create an MCP-facing wrapper for a handle_* function.
 
@@ -277,16 +334,19 @@ def create_mcp_app(settings: Settings):
             if p.annotation is not inspect._empty:
                 annotations[name] = p.annotation
 
-        async def _exec(*args, **kwargs):
-            merged_kwargs = {**inject_kwargs, **kwargs}
-            return await asyncio.to_thread(execute_db_tool, func, **merged_kwargs)
+        # Create executor function that will be run in thread
+        def executor(**kwargs):
+            return execute_db_tool(func, **kwargs)
 
-        _exec.__name__ = getattr(func, "__name__", "wrapped_tool")
-        _exec.__signature__ = new_sig
-        _exec.__doc__ = func.__doc__
-        if annotations:
-            _exec.__annotations__ = annotations
-        return _exec
+        return create_mcp_tool(
+            executor_func=executor,
+            signature=new_sig,
+            annotations=annotations,
+            inject_kwargs=inject_kwargs,
+            validate_required=False,
+            tool_name=getattr(func, "__name__", "wrapped_tool"),
+            tool_description=func.__doc__,
+        )
 
     # Register code tools via module loader
     module_loader = td.initialize_module_loader(config)
@@ -451,14 +511,19 @@ def create_mcp_app(settings: Settings):
             )
             annotations[param_name] = type_hint
         sig = inspect.Signature(parameters)
-        async def _dynamic_tool(**kwargs):
-            missing = [n for n in annotations if n not in kwargs]
-            if missing:
-                raise ValueError(f"Missing parameters: {missing}")
+
+        # Create executor function that will be run in thread
+        def executor(**kwargs):
             return execute_db_tool(td.handle_base_readQuery, tool["sql"], tool_name=name, **kwargs)
-        _dynamic_tool.__signature__ = sig
-        _dynamic_tool.__annotations__ = annotations
-        return mcp.tool(name=name, description=tool.get("description", ""))(_dynamic_tool)
+
+        tool_func = create_mcp_tool(
+            executor_func=executor,
+            signature=sig,
+            annotations=annotations,
+            validate_required=True,
+            tool_name=name,
+        )
+        return mcp.tool(name=name, description=tool.get("description", ""))(tool_func)
 
     """
     Generate a SQL generation function that returns a query string for a given cube definition and tool parameters (grain, measures, filters...).
@@ -536,12 +601,44 @@ def create_mcp_app(settings: Settings):
             )
             annotations[param_name] = type_hint
 
-        async def _dynamic_tool(dimensions, measures, dim_filters="", meas_filters="", order_by="", top=None, **kwargs):
-            # Check for missing parameters, if defined (TODO: skip for optional params with defaults)
+        # Build the combined signature: fixed cube parameters + custom parameters
+        # Fixed cube parameters
+        cube_params = [
+            inspect.Parameter("dimensions", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=str),
+            inspect.Parameter("measures", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=str),
+            inspect.Parameter("dim_filters", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default="", annotation=str),
+            inspect.Parameter("meas_filters", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default="", annotation=str),
+            inspect.Parameter("order_by", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default="", annotation=str),
+            inspect.Parameter("top", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default=None, annotation=int),
+        ]
+
+        # Separate required and optional custom parameters
+        all_params = cube_params + parameters
+        required_params = [p for p in all_params if p.default is inspect.Parameter.empty]
+        optional_params = [p for p in all_params if p.default is not inspect.Parameter.empty]
+
+        # Combine: required first, then optional (Python requirement)
+        sig = inspect.Signature(required_params + optional_params)
+
+        # Build combined annotations
+        cube_annotations = {
+            "dimensions": str,
+            "measures": str,
+            "dim_filters": str,
+            "meas_filters": str,
+            "order_by": str,
+            "top": int,
+        }
+        all_annotations = {**cube_annotations, **annotations}
+
+        # Create executor function that will be run in thread
+        def executor(dimensions, measures, dim_filters="", meas_filters="", order_by="", top=None, **kwargs):
+            # Validate custom parameters
             missing = [n for n in annotations if n not in kwargs]
             if missing:
-                raise ValueError(f"Missing parameters: {missing}")
-            sql_generator=generate_cube_query_tool(name, cube)
+                raise ValueError(f"Missing required parameters: {missing}")
+
+            sql_generator = generate_cube_query_tool(name, cube)
             return execute_db_tool(
                 td.handle_base_readQuery,
                 sql=sql_generator(
@@ -556,22 +653,6 @@ def create_mcp_app(settings: Settings):
                 **kwargs
             )
 
-        # Get existing parameters for _dynamic_tool (except **kwargs) and combine with cube parameters if any
-        existing_params = [p for p in inspect.signature(_dynamic_tool).parameters.values() if p.kind != inspect.Parameter.VAR_KEYWORD]
-
-        # Separate required (no default) and optional (with default) parameters
-        all_params = existing_params + parameters
-        required_params = [p for p in all_params if p.default is inspect.Parameter.empty]
-        optional_params = [p for p in all_params if p.default is not inspect.Parameter.empty]
-
-        # Combine: required first, then optional (Python requirement)
-        sig = inspect.Signature(required_params + optional_params)
-        _dynamic_tool.__signature__ = sig
-
-        # Merge annotations for _dynamic_tool and cube parameters
-        _dynamic_tool.__annotations__ = {**_dynamic_tool.__annotations__, **annotations}
-        _dynamic_tool.__name__ = 'get_cube_' + name
-
         # Build allowed values and definitions for dimensions and measures
         dim_lines = []
         for n, d in cube.get('dimensions', {}).items():
@@ -579,18 +660,18 @@ def create_mcp_app(settings: Settings):
         measure_lines = []
         for n, m in cube.get('measures', {}).items():
             measure_lines.append(f"    - {n}: {m.get('description', '')}")
-        
+
         # Create example strings for documentation
         dim_examples = [f"{d} {e}" for d, e in zip(list(cube.get('dimensions', {}))[:2], ["= 'value'", "in ('X', 'Y', 'Z')"])]
         dim_example = ' AND '.join(dim_examples)
-        
+
         meas_examples = [f"{m} {e}" for m, e in zip(list(cube.get('measures', {}))[:2], ["> 1000", "= 100"])]
         meas_example = ' AND '.join(meas_examples)
-        
+
         order_examples = [f"{d} {e}" for d, e in zip(list(cube.get('dimensions', {}))[:2], [" ASC", " DESC"])]
         order_example = ' , '.join(order_examples)
-        
-        _dynamic_tool.__doc__ = f"""
+
+        doc_string = f"""
         Tool to query the cube '{name}'.
         {cube.get('description', '')}
 
@@ -612,7 +693,16 @@ def create_mcp_app(settings: Settings):
         Returns:
             Query result as a formatted response.
         """
-        return mcp.tool(name=name, description=_dynamic_tool.__doc__)(_dynamic_tool)
+
+        tool_func = create_mcp_tool(
+            executor_func=executor,
+            signature=sig,
+            annotations=all_annotations,
+            validate_required=False,  # Validation happens inside executor for custom params
+            tool_name='get_cube_' + name,
+            tool_description=doc_string,
+        )
+        return mcp.tool(name=name, description=doc_string)(tool_func)
 
     # Register custom objects
     custom_terms: list[tuple[str, Any, str]] = []
