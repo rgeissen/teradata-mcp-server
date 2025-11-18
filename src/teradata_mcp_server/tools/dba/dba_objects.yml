@@ -130,10 +130,12 @@ dba_sessionInfo:
         ClientSystemUserId,
         ClientInterfaceVersion
     FROM DBC.SessionInfoV
-    WHERE UserName = :user_name (NOT CASESPECIFIC);
+    WHERE UserName = :user_name (NOT CASESPECIFIC) or :user_name='*';
   parameters:
     user_name:
-      description: "user name to analyze."
+      description: "User name to analyze. User '*' to get all users."
+      type_hint: str
+      default: '*'
 
 dba_systemSpace:
   type: tool

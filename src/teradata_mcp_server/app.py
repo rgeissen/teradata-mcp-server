@@ -20,7 +20,7 @@ import inspect
 import os
 import re
 from importlib.resources import files as pkg_files
-from typing import Any
+from typing import Annotated, Any
 
 import yaml
 from fastmcp import FastMCP
@@ -250,7 +250,6 @@ def create_mcp_app(settings: Settings):
         *,
         executor_func=None,
         signature,
-        annotations=None,
         inject_kwargs=None,
         validate_required=False,
         tool_name="mcp_tool",
@@ -265,7 +264,6 @@ def create_mcp_app(settings: Settings):
             executor_func: Callable that will be executed. Should be a function that
                           calls execute_db_tool with appropriate arguments.
             signature: The inspect.Signature for the MCP tool function.
-            annotations: Dict of parameter annotations for type hints.
             inject_kwargs: Dict of kwargs to inject when calling executor_func.
             validate_required: Whether to validate required parameters are present.
             tool_name: Name to assign to the MCP tool function.
@@ -275,7 +273,13 @@ def create_mcp_app(settings: Settings):
             An async function suitable for use as an MCP tool.
         """
         inject_kwargs = inject_kwargs or {}
-        annotations = annotations or {}
+
+        # Extract annotations from signature parameters
+        annotations = {
+            name: param.annotation
+            for name, param in signature.parameters.items()
+            if param.annotation is not inspect.Parameter.empty
+        }
 
         if validate_required:
             # Build list of required parameter names (those without defaults)
@@ -298,8 +302,7 @@ def create_mcp_app(settings: Settings):
         _mcp_tool.__name__ = tool_name
         _mcp_tool.__signature__ = signature
         _mcp_tool.__doc__ = tool_description
-        if annotations:
-            _mcp_tool.__annotations__ = annotations
+        _mcp_tool.__annotations__ = annotations
 
         return _mcp_tool
 
@@ -324,16 +327,6 @@ def create_mcp_app(settings: Settings):
         ]
         new_sig = sig.replace(parameters=params)
 
-        # Preserve annotations for Pydantic schema generation
-        annotations = {}
-        for name, p in sig.parameters.items():
-            if name in removable:
-                continue
-            if p.kind not in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY):
-                continue
-            if p.annotation is not inspect._empty:
-                annotations[name] = p.annotation
-
         # Create executor function that will be run in thread
         def executor(**kwargs):
             return execute_db_tool(func, **kwargs)
@@ -341,7 +334,6 @@ def create_mcp_app(settings: Settings):
         return create_mcp_tool(
             executor_func=executor,
             signature=new_sig,
-            annotations=annotations,
             inject_kwargs=inject_kwargs,
             validate_required=False,
             tool_name=getattr(func, "__name__", "wrapped_tool"),
@@ -506,14 +498,15 @@ def create_mcp_app(settings: Settings):
     def make_custom_query_tool(name, tool):
         param_defs = tool.get("parameters", {})
         parameters = []
-        annotations = {}
         for param_name, p in param_defs.items():
+            definition = p.get("definition")
             type_hint = p.get("type_hint", str)
+            annotation = Annotated[type_hint, definition] if definition else type_hint
             default = p.get("default", inspect.Parameter.empty)  # inspect.Parameter.empty if p.get("required", True) else p.get("default", None)
+
             parameters.append(
-                inspect.Parameter(param_name, kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default=default, annotation=type_hint)
+                inspect.Parameter(param_name, kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default=default, annotation=annotation)
             )
-            annotations[param_name] = type_hint
         sig = inspect.Signature(parameters)
 
         # Create executor function that will be run in thread
@@ -523,7 +516,6 @@ def create_mcp_app(settings: Settings):
         tool_func = create_mcp_tool(
             executor_func=executor,
             signature=sig,
-            annotations=annotations,
             validate_required=True,
             tool_name=name,
         )
@@ -596,14 +588,16 @@ def create_mcp_app(settings: Settings):
     def make_custom_cube_tool(name, cube):
         param_defs = cube.get("parameters", {})
         parameters = []
-        annotations = {}
+        required_custom_params = []
         for param_name, p in param_defs.items():
             type_hint = p.get("type_hint", str)
             default = p.get("default", inspect.Parameter.empty)  # inspect.Parameter.empty if p.get("required", True) else p.get("default", None)
             parameters.append(
                 inspect.Parameter(param_name, kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default=default, annotation=type_hint)
             )
-            annotations[param_name] = type_hint
+            # Track required custom params for validation
+            if default is inspect.Parameter.empty:
+                required_custom_params.append(param_name)
 
         # Build the combined signature: fixed cube parameters + custom parameters
         # Fixed cube parameters
@@ -624,21 +618,10 @@ def create_mcp_app(settings: Settings):
         # Combine: required first, then optional (Python requirement)
         sig = inspect.Signature(required_params + optional_params)
 
-        # Build combined annotations
-        cube_annotations = {
-            "dimensions": str,
-            "measures": str,
-            "dim_filters": str,
-            "meas_filters": str,
-            "order_by": str,
-            "top": int,
-        }
-        all_annotations = {**cube_annotations, **annotations}
-
         # Create executor function that will be run in thread
         def executor(dimensions, measures, dim_filters="", meas_filters="", order_by="", top=None, **kwargs):
             # Validate custom parameters
-            missing = [n for n in annotations if n not in kwargs]
+            missing = [n for n in required_custom_params if n not in kwargs]
             if missing:
                 raise ValueError(f"Missing required parameters: {missing}")
 
@@ -715,7 +698,6 @@ Returns:
         tool_func = create_mcp_tool(
             executor_func=executor,
             signature=sig,
-            annotations=all_annotations,
             validate_required=False,  # Validation happens inside executor for custom params
             tool_name='get_cube_' + name,
             tool_description=doc_string,
