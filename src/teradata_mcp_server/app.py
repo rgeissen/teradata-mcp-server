@@ -20,7 +20,7 @@ import inspect
 import os
 import re
 from importlib.resources import files as pkg_files
-from typing import Any
+from typing import Annotated, Any
 
 import yaml
 from fastmcp import FastMCP
@@ -29,7 +29,7 @@ from pydantic import Field, BaseModel
 
 from teradata_mcp_server.config import Settings
 from teradata_mcp_server import utils as config_utils
-from teradata_mcp_server.utils import setup_logging, format_text_response, format_error_response
+from teradata_mcp_server.utils import setup_logging, format_text_response, format_error_response, resolve_type_hint
 from teradata_mcp_server.middleware import RequestContextMiddleware
 from teradata_mcp_server.tools.utils.queryband import build_queryband
 from sqlalchemy.engine import Connection
@@ -250,7 +250,6 @@ def create_mcp_app(settings: Settings):
         *,
         executor_func=None,
         signature,
-        annotations=None,
         inject_kwargs=None,
         validate_required=False,
         tool_name="mcp_tool",
@@ -265,7 +264,6 @@ def create_mcp_app(settings: Settings):
             executor_func: Callable that will be executed. Should be a function that
                           calls execute_db_tool with appropriate arguments.
             signature: The inspect.Signature for the MCP tool function.
-            annotations: Dict of parameter annotations for type hints.
             inject_kwargs: Dict of kwargs to inject when calling executor_func.
             validate_required: Whether to validate required parameters are present.
             tool_name: Name to assign to the MCP tool function.
@@ -275,7 +273,13 @@ def create_mcp_app(settings: Settings):
             An async function suitable for use as an MCP tool.
         """
         inject_kwargs = inject_kwargs or {}
-        annotations = annotations or {}
+
+        # Extract annotations from signature parameters
+        annotations = {
+            name: param.annotation
+            for name, param in signature.parameters.items()
+            if param.annotation is not inspect.Parameter.empty
+        }
 
         if validate_required:
             # Build list of required parameter names (those without defaults)
@@ -298,8 +302,7 @@ def create_mcp_app(settings: Settings):
         _mcp_tool.__name__ = tool_name
         _mcp_tool.__signature__ = signature
         _mcp_tool.__doc__ = tool_description
-        if annotations:
-            _mcp_tool.__annotations__ = annotations
+        _mcp_tool.__annotations__ = annotations
 
         return _mcp_tool
 
@@ -324,16 +327,6 @@ def create_mcp_app(settings: Settings):
         ]
         new_sig = sig.replace(parameters=params)
 
-        # Preserve annotations for Pydantic schema generation
-        annotations = {}
-        for name, p in sig.parameters.items():
-            if name in removable:
-                continue
-            if p.kind not in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY):
-                continue
-            if p.annotation is not inspect._empty:
-                annotations[name] = p.annotation
-
         # Create executor function that will be run in thread
         def executor(**kwargs):
             return execute_db_tool(func, **kwargs)
@@ -341,7 +334,6 @@ def create_mcp_app(settings: Settings):
         return create_mcp_tool(
             executor_func=executor,
             signature=new_sig,
-            annotations=annotations,
             inject_kwargs=inject_kwargs,
             validate_required=False,
             tool_name=getattr(func, "__name__", "wrapped_tool"),
@@ -467,17 +459,13 @@ def create_mcp_app(settings: Settings):
             annotations: dict[str, Any] = {}
             for param_name, meta in parameters.items():
                 meta = meta or {}
-                type_hint_raw = meta.get("type_hint", str)
-                if isinstance(type_hint_raw, str):
-                    try:
-                        type_hint = eval(type_hint_raw, {"str": str, "int": int, "float": float, "bool": bool})
-                    except Exception:
-                        type_hint = str
-                else:
-                    type_hint = type_hint_raw
+                type_hint_raw = meta.get("type_hint", "str")
+                type_hint = resolve_type_hint(type_hint_raw)
                 required = meta.get("required", True)
                 desc_txt = meta.get("description", "")
-                desc_txt += f" (type: {type_hint_raw})"
+                # Get the type name for display
+                type_name = type_hint.__name__ if hasattr(type_hint, '__name__') else str(type_hint_raw)
+                desc_txt += f" (type: {type_name})"
                 if required and "default" not in meta:
                     default_value = Field(..., description=desc_txt)
                 else:
@@ -504,16 +492,29 @@ def create_mcp_app(settings: Settings):
             return mcp.prompt(description=desc)(_dynamic_prompt)
 
     def make_custom_query_tool(name, tool):
+        description = tool.get("description", "")
         param_defs = tool.get("parameters", {})
         parameters = []
-        annotations = {}
+        if param_defs:
+            description += "\nArguments:"
         for param_name, p in param_defs.items():
-            type_hint = p.get("type_hint", str)
+            param_description = p.get("description", "")
+            type_hint_raw = p.get("type_hint", "str")
+            type_hint = resolve_type_hint(type_hint_raw)  # Convert type string to actual type class
+            annotation = Annotated[type_hint, param_description] if param_description else type_hint
             default = p.get("default", inspect.Parameter.empty)  # inspect.Parameter.empty if p.get("required", True) else p.get("default", None)
+
             parameters.append(
-                inspect.Parameter(param_name, kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default=default, annotation=type_hint)
+                inspect.Parameter(param_name, kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default=default, annotation=annotation)
             )
-            annotations[param_name] = type_hint
+
+            # Append parameter name and description to function description
+            # Disabled as already included in Annotations (consider introducing a way to toggle this if clients can't see annotations)
+            if False:
+                type_name = type_hint.__name__ if hasattr(type_hint, '__name__') else str(type_hint_raw)
+                description += f"\n    * {param_name}"
+                description += f": {param_description}" if param_description else ""
+                description += f" (type: {type_name})"
         sig = inspect.Signature(parameters)
 
         # Create executor function that will be run in thread
@@ -523,11 +524,10 @@ def create_mcp_app(settings: Settings):
         tool_func = create_mcp_tool(
             executor_func=executor,
             signature=sig,
-            annotations=annotations,
             validate_required=True,
             tool_name=name,
         )
-        return mcp.tool(name=name, description=tool.get("description", ""))(tool_func)
+        return mcp.tool(name=name, description=description)(tool_func)
 
     """
     Generate a SQL generation function that returns a query string for a given cube definition and tool parameters (grain, measures, filters...).
@@ -594,26 +594,66 @@ def create_mcp_app(settings: Settings):
         return _cube_query_tool
 
     def make_custom_cube_tool(name, cube):
+        # Build allowed values and examples FIRST so we can use them in annotations
+        dimensions_dict = cube.get('dimensions', {})
+        measures_dict = cube.get('measures', {})
+
+        # Build dimension list with descriptions
+        dim_list = [f"{n}: {d.get('description', '')}" for n, d in dimensions_dict.items()]
+        dim_names = list(dimensions_dict.keys())
+        dimensions_desc = f"Comma-separated dimension names to group by. Allowed: {', '.join(dim_names)}"
+
+        # Build measure list with descriptions
+        meas_list = [f"{n}: {m.get('description', '')}" for n, m in measures_dict.items()]
+        meas_names = list(measures_dict.keys())
+        measures_desc = f"Comma-separated measure names to aggregate. Allowed: {', '.join(meas_names)}"
+
+        # Build filter examples
+        dim_examples = [f"{d} {e}" for d, e in zip(dim_names[:2], ["= 'value'", "in ('X', 'Y', 'Z')"])] if dim_names else []
+        dim_example = ' AND '.join(dim_examples) if dim_examples else "dimension_name = 'value'"
+        dim_filters_desc = f"Filter expression to apply to dimensions. Valid dimension names: [{', '.join(dim_names)}]. Example: {dim_example}"
+
+        meas_examples = [f"{m} {e}" for m, e in zip(meas_names[:2], ["> 1000", "= 100"])] if meas_names else []
+        meas_example = ' AND '.join(meas_examples) if meas_examples else "measure_name > 1000"
+        meas_filters_desc = f"Filter expression to apply to computed measures. Valid measure names: [{', '.join(meas_names)}]. Example: {meas_example}"
+
+        # Build order example
+        order_examples = [f"{d} {e}" for d, e in zip(dim_names[:2], ["ASC", "DESC"])] if dim_names else []
+        order_example = ', '.join(order_examples) if order_examples else "dimension_name ASC"
+        order_by_desc = f"Order expression on dimensions and measures. Example: {order_example}"
+
+        # Now build custom parameters
         param_defs = cube.get("parameters", {})
         parameters = []
-        annotations = {}
+        required_custom_params = []
         for param_name, p in param_defs.items():
-            type_hint = p.get("type_hint", str)
-            default = p.get("default", inspect.Parameter.empty)  # inspect.Parameter.empty if p.get("required", True) else p.get("default", None)
+            param_description = p.get("description", "")
+            type_hint_raw = p.get("type_hint", "str")
+            type_hint = resolve_type_hint(type_hint_raw)  # Convert to actual type class
+            annotation = Annotated[type_hint, param_description] if param_description else type_hint
+            default = p.get("default", inspect.Parameter.empty)
             parameters.append(
-                inspect.Parameter(param_name, kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default=default, annotation=type_hint)
+                inspect.Parameter(param_name, kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default=default, annotation=annotation)
             )
-            annotations[param_name] = type_hint
+            # Track required custom params for validation
+            if default is inspect.Parameter.empty:
+                required_custom_params.append(param_name)
 
         # Build the combined signature: fixed cube parameters + custom parameters
-        # Fixed cube parameters
+        # Fixed cube parameters with detailed annotated descriptions
         cube_params = [
-            inspect.Parameter("dimensions", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=str),
-            inspect.Parameter("measures", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=str),
-            inspect.Parameter("dim_filters", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default="", annotation=str),
-            inspect.Parameter("meas_filters", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default="", annotation=str),
-            inspect.Parameter("order_by", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default="", annotation=str),
-            inspect.Parameter("top", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default=None, annotation=int),
+            inspect.Parameter("dimensions", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                            annotation=Annotated[str, dimensions_desc]),
+            inspect.Parameter("measures", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                            annotation=Annotated[str, measures_desc]),
+            inspect.Parameter("dim_filters", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default="",
+                            annotation=Annotated[str, dim_filters_desc]),
+            inspect.Parameter("meas_filters", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default="",
+                            annotation=Annotated[str, meas_filters_desc]),
+            inspect.Parameter("order_by", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default="",
+                            annotation=Annotated[str, order_by_desc]),
+            inspect.Parameter("top", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default=None,
+                            annotation=Annotated[int, "Limit the number of rows returned (positive integer)"]),
         ]
 
         # Separate required and optional custom parameters
@@ -624,21 +664,15 @@ def create_mcp_app(settings: Settings):
         # Combine: required first, then optional (Python requirement)
         sig = inspect.Signature(required_params + optional_params)
 
-        # Build combined annotations
-        cube_annotations = {
-            "dimensions": str,
-            "measures": str,
-            "dim_filters": str,
-            "meas_filters": str,
-            "order_by": str,
-            "top": int,
-        }
-        all_annotations = {**cube_annotations, **annotations}
+        # Debug: log the signature parameters
+        logger.debug(f"Cube tool '{name}' signature parameters: {list(sig.parameters.keys())}")
+        for param_name, param in sig.parameters.items():
+            logger.debug(f"  {param_name}: annotation={param.annotation}, default={param.default}")
 
         # Create executor function that will be run in thread
         def executor(dimensions, measures, dim_filters="", meas_filters="", order_by="", top=None, **kwargs):
             # Validate custom parameters
-            missing = [n for n in annotations if n not in kwargs]
+            missing = [n for n in required_custom_params if n not in kwargs]
             if missing:
                 raise ValueError(f"Missing required parameters: {missing}")
 
@@ -657,32 +691,20 @@ def create_mcp_app(settings: Settings):
                 **kwargs
             )
 
-        # Build allowed values and definitions for dimensions and measures
-        dim_lines = []
-        for n, d in cube.get('dimensions', {}).items():
-            dim_lines.append(f"\t\t- {n}: {d.get('description', '')}")
-        measure_lines = []
-        for n, m in cube.get('measures', {}).items():
-            measure_lines.append(f"\t\t- {n}: {m.get('description', '')}")
+        # Build detailed dimension and measure lists for docstring
+        dim_lines = [f"\t\t- {item}" for item in dim_list]
+        measure_lines = [f"\t\t- {item}" for item in meas_list]
 
         # Build custom parameters documentation
         custom_param_lines = []
         for param_name, p in param_defs.items():
             param_desc = p.get('description', '')
-            param_type = p.get('type_hint', str).__name__
+            type_hint_raw = p.get('type_hint', 'str')
+            type_hint = resolve_type_hint(type_hint_raw)
+            param_type = type_hint.__name__ if hasattr(type_hint, '__name__') else str(type_hint_raw)
             is_required = p.get('default', inspect.Parameter.empty) is inspect.Parameter.empty
             required_text = " (required)" if is_required else " (optional)"
             custom_param_lines.append(f"    * {param_name} ({param_type}){required_text}: {param_desc}")
-
-        # Create example strings for documentation
-        dim_examples = [f"{d} {e}" for d, e in zip(list(cube.get('dimensions', {}))[:2], ["= 'value'", "in ('X', 'Y', 'Z')"])]
-        dim_example = ' AND '.join(dim_examples)
-
-        meas_examples = [f"{m} {e}" for m, e in zip(list(cube.get('measures', {}))[:2], ["> 1000", "= 100"])]
-        meas_example = ' AND '.join(meas_examples)
-
-        order_examples = [f"{d} {e}" for d, e in zip(list(cube.get('dimensions', {}))[:2], [" ASC", " DESC"])]
-        order_example = ' , '.join(order_examples)
 
         # Build custom parameters section if there are any
         custom_params_section = ""
@@ -694,19 +716,16 @@ def create_mcp_app(settings: Settings):
 This is an OLAP cube tool that presents selected measures at a specified level of aggregation and filtering.
 
 Expected inputs:
-    * dimensions (str): Comma-separated dimension names to group by. Allowed values for dimensions\n:
+    * dimensions (str): {dimensions_desc}
 {chr(10).join(dim_lines)}
 
-    * measures (str): Comma-separated measure names to aggregate. Allowed values for measures:
+    * measures (str): {measures_desc}
 {chr(10).join(measure_lines)}
 
-    * dim_filters (str): Filter expression to apply to dimensions. Valid dimension names are: [{', '.join(cube.get('dimensions', {}).keys())}], use valid SQL expressions, for example:
-"{dim_example}"
-    * meas_filters (str): Filter expression to apply to computed measures. Valid measure names are: [{', '.join(cube.get('measures', {}).keys())}], use valid SQL expressions, for example:
-"{meas_example}"
-    * order_by (str): Order expression on any selected dimensions and measures. Use SQL syntax, for example:
-"{order_example}"
-    * top (int): Limit the number of rows returned, use a positive integer.
+    * dim_filters (str): {dim_filters_desc}
+    * meas_filters (str): {meas_filters_desc}
+    * order_by (str): {order_by_desc}
+    * top (int): Limit the number of rows returned (positive integer)
 {custom_params_section}
 Returns:
     Query result as a formatted response.
@@ -715,7 +734,6 @@ Returns:
         tool_func = create_mcp_tool(
             executor_func=executor,
             signature=sig,
-            annotations=all_annotations,
             validate_required=False,  # Validation happens inside executor for custom params
             tool_name='get_cube_' + name,
             tool_description=doc_string,

@@ -13,7 +13,7 @@ import logging.config
 import logging.handlers
 import os
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 from importlib.resources import files as pkg_files
 import yaml
 
@@ -152,6 +152,40 @@ def format_error_response(error: str):
     return format_text_response(f"Error: {error}")
 
 
+# -------------------- Type hint resolution -------------------- #
+def resolve_type_hint(type_hint):
+    """Convert a type hint from string or type to actual type class.
+
+    Args:
+        type_hint: Can be a string like 'str', 'int', 'float', 'bool', or an actual type class
+
+    Returns:
+        The actual type class (str, int, float, bool, etc.)
+    """
+    if isinstance(type_hint, type):
+        return type_hint
+
+    if isinstance(type_hint, str):
+        # Use eval with a restricted namespace for safety
+        namespace = {
+            'str': str,
+            'int': int,
+            'float': float,
+            'bool': bool,
+            'list': list,
+            'dict': dict,
+            'Any': Any,
+        }
+        try:
+            return eval(type_hint, {"__builtins__": {}}, namespace)
+        except (NameError, SyntaxError, TypeError):
+            # Fallback to str if evaluation fails
+            return str
+
+    return str  # Fallback to str
+
+
+# -------------------- Configuration loading -------------------- #
 def load_profiles(working_dir: Optional[Path] = None) -> Dict[str, Any]:
     """Load packaged profiles.yml, then working directory profiles.yml (overrides)."""
     if working_dir is None:
