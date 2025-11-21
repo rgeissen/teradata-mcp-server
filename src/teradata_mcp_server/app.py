@@ -29,7 +29,7 @@ from pydantic import Field, BaseModel
 
 from teradata_mcp_server.config import Settings
 from teradata_mcp_server import utils as config_utils
-from teradata_mcp_server.utils import setup_logging, format_text_response, format_error_response
+from teradata_mcp_server.utils import setup_logging, format_text_response, format_error_response, resolve_type_hint
 from teradata_mcp_server.middleware import RequestContextMiddleware
 from teradata_mcp_server.tools.utils.queryband import build_queryband
 from sqlalchemy.engine import Connection
@@ -459,17 +459,13 @@ def create_mcp_app(settings: Settings):
             annotations: dict[str, Any] = {}
             for param_name, meta in parameters.items():
                 meta = meta or {}
-                type_hint_raw = meta.get("type_hint", str)
-                if isinstance(type_hint_raw, str):
-                    try:
-                        type_hint = eval(type_hint_raw, {"str": str, "int": int, "float": float, "bool": bool})
-                    except Exception:
-                        type_hint = str
-                else:
-                    type_hint = type_hint_raw
+                type_hint_raw = meta.get("type_hint", "str")
+                type_hint = resolve_type_hint(type_hint_raw)
                 required = meta.get("required", True)
                 desc_txt = meta.get("description", "")
-                desc_txt += f" (type: {type_hint_raw})"
+                # Get the type name for display
+                type_name = type_hint.__name__ if hasattr(type_hint, '__name__') else str(type_hint_raw)
+                desc_txt += f" (type: {type_name})"
                 if required and "default" not in meta:
                     default_value = Field(..., description=desc_txt)
                 else:
@@ -496,17 +492,28 @@ def create_mcp_app(settings: Settings):
             return mcp.prompt(description=desc)(_dynamic_prompt)
 
     def make_custom_query_tool(name, tool):
+        description = tool.get("description", "")
         param_defs = tool.get("parameters", {})
         parameters = []
+        if param_defs:
+            description += "\nArguments:"
         for param_name, p in param_defs.items():
             definition = p.get("definition")
-            type_hint = p.get("type_hint", str)
+            type_hint_raw = p.get("type_hint", "str")  # Keep original string for documentation
+            type_hint = resolve_type_hint(type_hint_raw)  # Convert to actual type class
             annotation = Annotated[type_hint, definition] if definition else type_hint
             default = p.get("default", inspect.Parameter.empty)  # inspect.Parameter.empty if p.get("required", True) else p.get("default", None)
 
             parameters.append(
                 inspect.Parameter(param_name, kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default=default, annotation=annotation)
             )
+
+            # Append parameter name and definition to function description
+            # Use the resolved type's __name__ for display
+            type_name = type_hint.__name__ if hasattr(type_hint, '__name__') else str(type_hint_raw)
+            description += f"\n    * {param_name}"
+            description += f": {definition}" if definition else ""
+            description += f" (type: {type_name})"
         sig = inspect.Signature(parameters)
 
         # Create executor function that will be run in thread
@@ -519,7 +526,7 @@ def create_mcp_app(settings: Settings):
             validate_required=True,
             tool_name=name,
         )
-        return mcp.tool(name=name, description=tool.get("description", ""))(tool_func)
+        return mcp.tool(name=name, description=description)(tool_func)
 
     """
     Generate a SQL generation function that returns a query string for a given cube definition and tool parameters (grain, measures, filters...).
@@ -590,7 +597,8 @@ def create_mcp_app(settings: Settings):
         parameters = []
         required_custom_params = []
         for param_name, p in param_defs.items():
-            type_hint = p.get("type_hint", str)
+            type_hint_raw = p.get("type_hint", "str")
+            type_hint = resolve_type_hint(type_hint_raw)  # Convert to actual type class
             default = p.get("default", inspect.Parameter.empty)  # inspect.Parameter.empty if p.get("required", True) else p.get("default", None)
             parameters.append(
                 inspect.Parameter(param_name, kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default=default, annotation=type_hint)
@@ -652,7 +660,9 @@ def create_mcp_app(settings: Settings):
         custom_param_lines = []
         for param_name, p in param_defs.items():
             param_desc = p.get('description', '')
-            param_type = p.get('type_hint', str).__name__
+            type_hint_raw = p.get('type_hint', 'str')
+            type_hint = resolve_type_hint(type_hint_raw)
+            param_type = type_hint.__name__ if hasattr(type_hint, '__name__') else str(type_hint_raw)
             is_required = p.get('default', inspect.Parameter.empty) is inspect.Parameter.empty
             required_text = " (required)" if is_required else " (optional)"
             custom_param_lines.append(f"    * {param_name} ({param_type}){required_text}: {param_desc}")
