@@ -20,7 +20,7 @@ There are many client options that you can choose from, they each have different
 - [Microsoft Copilot](./Microsoft_copilot.md)
 - [Google AgentSpace](./Google_agentspace.md)
 - [Open WebUI](./Open_WebUI.md)
-- [Trusted Data Agent](https://github.com/rgeissen/trusted-data-agent) 
+- [Uderia Platform](https://uderia.com) 
 - [Perplexity Desktop](Perplexity%20Desktop.md)
 
 ## Audio Client
