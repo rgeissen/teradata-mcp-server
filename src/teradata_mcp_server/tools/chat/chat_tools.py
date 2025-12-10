@@ -16,24 +16,7 @@ from teradata_mcp_server.tools.utils import create_response, rows_to_json
 logger = logging.getLogger("teradata_mcp_server")
 
 
-def load_chat_cmplt_config():
-    """Load chat completion configuration from chat_cmplt_config.yml"""
-    try:
-        current_dir = Path(__file__).parent
-        config_path = current_dir.parent.parent / 'config' / 'chat_cmplt_config.yml'
-        
-        with open(config_path, 'r') as file:
-            logger.info(f"Loading chat completion config from: {config_path}")
-            return yaml.safe_load(file)
-    except FileNotFoundError:
-        logger.warning(f"Chat completion config file not found: {config_path}, using defaults")
-        return get_default_chat_cmplt_config()
-    except Exception as e:
-        logger.error(f"Error loading chat completion config: {e}")
-        return get_default_chat_cmplt_config()
-
-
-def get_default_chat_cmplt_config():
+def get_default_chat_config():
     """Default chat completion configuration as fallback"""
     return {
         "base_url": None,
@@ -58,7 +41,7 @@ def get_default_chat_cmplt_config():
     }
 
 
-def _validate_chat_cmplt_config(config: dict) -> bool:
+def _validate_chat_config(config: dict) -> bool:
     """
     Validate that mandatory parameters are present.
 
@@ -68,7 +51,7 @@ def _validate_chat_cmplt_config(config: dict) -> bool:
       - databases.function_db
     """
     if not isinstance(config, dict):
-        logger.error("chat_cmplt config is not a dictionary")
+        logger.error("chat config is not a dictionary")
         return False
 
     base_url = config.get("base_url")
@@ -98,12 +81,12 @@ def _validate_chat_cmplt_config(config: dict) -> bool:
     return True
 
 
-def load_chat_cmplt_config():
-    """Load chat completion configuration from chat_cmplt_config.yml"""
+def load_chat_config():
+    """Load chat completion configuration from chat_config.yml"""
     try:
         current_dir = Path(__file__).parent
-        config_path = current_dir.parent.parent / "config" / "chat_cmplt_config.yml"
-        
+        config_path = current_dir.parent.parent / "config" / "chat_config.yml"
+
         with open(config_path, "r") as file:
             logger.info(f"Loading chat completion config from: {config_path}")
             loaded = yaml.safe_load(file) or {}
@@ -113,13 +96,13 @@ def load_chat_cmplt_config():
         logger.warning(
             f"Chat completion config file not found: {config_path}, using defaults"
         )
-        return get_default_chat_cmplt_config()
+        return get_default_chat_config()
     except Exception as e:
         logger.error(f"Error loading chat completion config: {e}", exc_info=True)
-        return get_default_chat_cmplt_config()
+        return get_default_chat_config()
 
 # Initialize global config once at import time
-CHAT_CMPLT_CONFIG = load_chat_cmplt_config()
+CHAT_CONFIG = load_chat_config()
 
 
 def _prepare_sql_inputs(sql: str, system_message: str) -> tuple[str, str]:
@@ -167,21 +150,21 @@ def build_complete_chat_sql(
     base_url = config.get('base_url')
     if not base_url or base_url == "":
         raise ValueError(
-            "BaseURL is required but not configured in chat_cmplt_config.yml. "
+            "BaseURL is required but not configured in chat_config.yml. "
             "Please set BaseURL to your inference server URL "
             "(e.g., 'http://localhost:11434' or 'https://api.openai.com')"
         )
-    
+
     model = config.get('model')
     if not model or model == "":
         raise ValueError(
-            "Model is required but not configured in chat_cmplt_config.yml. "
+            "Model is required but not configured in chat_config.yml. "
             "Please set Model to your model name "
             "(e.g., 'qwen2.5-coder:7b', 'gpt-4', 'claude-3-opus')"
         )
-    
+
     # Get API key from environment variable
-    api_key = os.environ.get('CHAT_CMPLT_API_KEY')
+    api_key = os.environ.get('CHAT_API_KEY')
     
     # Get database name
     database_name = config.get('databases', {}).get('function_db', 'openai_client')
@@ -207,9 +190,9 @@ def build_complete_chat_sql(
     # Add optional API key from environment
     if api_key:
         using_params.append(f"        ApiKey('{api_key}')")
-        logger.debug("Using API key from CHAT_CMPLT_API_KEY environment variable")
+        logger.debug("Using API key from CHAT_API_KEY environment variable")
     else:
-        logger.debug("No API key found in CHAT_CMPLT_API_KEY environment variable")
+        logger.debug("No API key found in CHAT_API_KEY environment variable")
     
     # Add custom headers
     if custom_headers:
@@ -260,7 +243,7 @@ FROM {database_name}.CompleteChat(
     return complete_sql_query
 
 
-def handle_chat_cmplt_completeChat(
+def handle_chat_completeChat(
     conn: TeradataConnection,
     sql: str,
     system_message: str,
@@ -269,28 +252,28 @@ def handle_chat_cmplt_completeChat(
 ):
     """
     Execute chat completion using OpenAI-compatible LLM inference server.
-    
+
     Calls the Teradata CompleteChat table operator to generate text completions,
     summaries, classifications, and other AI-powered text transformations.
-    
+
     Arguments:
         sql: SQL query that returns a table with a 'txt' column containing prompts.
             Example: "SELECT id, txt FROM emails.customer_emails"
         system_message: System instruction that defines the assistant's behavior.
                        Example: "You are a sentiment analyzer. Classify as positive, negative, or neutral."
-    
+
     Returns:
         JSON response with generated text for each input row, including:
         - response_txt: Generated text response from the LLM
     """
     logger.debug(
-        f"Tool: handle_chat_cmplt_completeChat: "
+        f"Tool: handle_chat_completeChat: "
         f"sql={sql[:100] if sql else 'None'}..., "
         f"system_message={system_message[:50] if system_message else 'None'}..."
     )
-    
+
     # Load config
-    config = CHAT_CMPLT_CONFIG
+    config = CHAT_CONFIG
 
     # If config is missing or invalid, do not execute the tool
     if not config:
@@ -302,7 +285,7 @@ def handle_chat_cmplt_completeChat(
         return create_response(
             {"error": error_msg},
             {
-                "tool_name": "chat_cmplt_completeChat",
+                "tool_name": "chat_completeChat",
                 "status": "error",
                 "error_type": "configuration_error",
             },
@@ -339,17 +322,17 @@ FROM (
 
             # Build metadata
             metadata = {
-                "tool_name": "chat_cmplt_completeChat",
+                "tool_name": "chat_completeChat",
                 "base_url": config.get("base_url"),
                 "model": config.get("model"),
                 "system_message": system_message[:100] + "..." if len(system_message) > 100 else system_message,
                 "database_name": config.get("databases", {}).get("function_db"),
                 "rows_processed": len(data)
             }
-            
-            logger.debug(f"Tool: handle_chat_cmplt_completeChat: Metadata: {metadata}")
+
+            logger.debug(f"Tool: handle_chat_completeChat: Metadata: {metadata}")
             return create_response(data, metadata)
-            
+
     except ValueError as ve:
         # Configuration errors
         error_msg = str(ve)
@@ -357,7 +340,7 @@ FROM (
         return create_response(
             {"error": error_msg},
             {
-                "tool_name": "chat_cmplt_completeChat",
+                "tool_name": "chat_completeChat",
                 "status": "error",
                 "error_type": "configuration_error"
             }
@@ -369,14 +352,14 @@ FROM (
         return create_response(
             {"error": error_msg},
             {
-                "tool_name": "chat_cmplt_completeChat",
+                "tool_name": "chat_completeChat",
                 "status": "error",
                 "error_type": "execution_error"
             }
         )
 
 
-def handle_chat_cmplt_aggregatedCompleteChat(
+def handle_chat_aggregatedCompleteChat(
     conn: TeradataConnection,
     sql: str,
     system_message: str,
@@ -385,28 +368,28 @@ def handle_chat_cmplt_aggregatedCompleteChat(
 ):
     """
     Execute chat completion and return aggregated response statistics.
-    
+
     Wraps CompleteChat with aggregation to identify common response patterns.
     Filters out empty responses, groups by unique response text, and counts occurrences.
-    
+
     Use this tool when you want to:
     - Analyze distribution of LLM responses (e.g., sentiment counts)
     - Identify most common classifications or categories
     - Get summary statistics of text generation results
     - Count unique answer patterns across multiple inputs
-    
+
     Arguments:
         sql: SQL query that returns a table with a 'txt' column containing prompts.
             Example: "SELECT id, txt FROM emails.customer_emails"
         system_message: System instruction that defines the assistant's behavior.
                        Example: "You are a sentiment analyzer. Classify as positive, negative, or neutral."
-    
+
     Returns:
         JSON response with aggregated results:
         - response_txt: Unique response text
         - response_count: Number of times this response occurred
         - Metadata including total and unique response counts
-    
+
     Example:
         Input: 100 customer emails for sentiment analysis
         Output:
@@ -417,13 +400,13 @@ def handle_chat_cmplt_aggregatedCompleteChat(
         ]
     """
     logger.debug(
-        f"Tool: handle_chat_cmplt_aggregatedCompleteChat: "
+        f"Tool: handle_chat_aggregatedCompleteChat: "
         f"sql={sql[:100] if sql else 'None'}..., "
         f"system_message={system_message[:50] if system_message else 'None'}..."
     )
-    
+
     # Load config
-    config = CHAT_CMPLT_CONFIG
+    config = CHAT_CONFIG
     
     try:
         # Prepare inputs: remove trailing semicolon and escape quotes, normalize whitespace
@@ -472,10 +455,10 @@ GROUP BY 1
             unique_responses = len(data)
             
             # Build metadata
-            api_key_configured = bool(os.environ.get('CHAT_CMPLT_API_KEY'))
-            
+            api_key_configured = bool(os.environ.get('CHAT_API_KEY'))
+
             metadata = {
-                "tool_name": "chat_cmplt_aggregatedCompleteChat",
+                "tool_name": "chat_aggregatedCompleteChat",
                 "operation": "aggregated_chat_completion",
                 "base_url": config.get('base_url'),
                 "model": config.get('model'),
@@ -491,17 +474,17 @@ GROUP BY 1
                 },
                 "description": "Aggregated chat completion results showing unique responses and their counts"
             }
-            
-            logger.debug(f"Tool: handle_chat_cmplt_aggregatedCompleteChat: Metadata: {metadata}")
+
+            logger.debug(f"Tool: handle_chat_aggregatedCompleteChat: Metadata: {metadata}")
             return create_response(data, metadata)
-            
+
     except ValueError as ve:
         error_msg = str(ve)
         logger.error(f"Configuration error: {error_msg}", exc_info=True)
         return create_response(
             {"error": error_msg},
             {
-                "tool_name": "chat_cmplt_aggregatedCompleteChat",
+                "tool_name": "chat_aggregatedCompleteChat",
                 "status": "error",
                 "error_type": "configuration_error"
             }
@@ -512,7 +495,7 @@ GROUP BY 1
         return create_response(
             {"error": error_msg},
             {
-                "tool_name": "chat_cmplt_aggregatedCompleteChat",
+                "tool_name": "chat_aggregatedCompleteChat",
                 "status": "error",
                 "error_type": "execution_error"
             }
@@ -522,38 +505,38 @@ GROUP BY 1
 # Dynamically update docstrings with config values
 def _update_docstrings_with_config():
     """Update function docstrings with actual configuration values"""
-    config = CHAT_CMPLT_CONFIG
-    
+    config = CHAT_CONFIG
+
     # Get config values
     base_url = config.get('base_url', 'not configured')
     model = config.get('model', 'not configured')
     include_diagnostics = config.get('output', {}).get('include_diagnostics', True)
     include_tachyon = config.get('output', {}).get('include_tachyon_headers', True)
-    
+
     # Build additional output fields list
     additional_outputs = []
     if include_tachyon:
         additional_outputs.append("        - Tachyon headers: x_request_id, x_correlation_id, x_wf_request_date")
     if include_diagnostics:
         additional_outputs.append("        - Diagnostics: retries_made, last_attempt_duration, rate_limit_exceeded")
-    
+
     # Build config info string
     config_info = f"\n\nConfigured for: {base_url} using model '{model}'"
-    
+
     # Update completeChat docstring
-    if handle_chat_cmplt_completeChat.__doc__:
+    if handle_chat_completeChat.__doc__:
         # Add additional output fields if any
         if additional_outputs:
             additional_fields = "\n" + "\n".join(additional_outputs)
             # Insert before the config info
-            handle_chat_cmplt_completeChat.__doc__ += additional_fields
-        
+            handle_chat_completeChat.__doc__ += additional_fields
+
         # Add config info
-        handle_chat_cmplt_completeChat.__doc__ += config_info
-    
+        handle_chat_completeChat.__doc__ += config_info
+
     # Update aggregatedCompleteChat docstring (it doesn't have conditional outputs, just add config)
-    if handle_chat_cmplt_aggregatedCompleteChat.__doc__:
-        handle_chat_cmplt_aggregatedCompleteChat.__doc__ += config_info
+    if handle_chat_aggregatedCompleteChat.__doc__:
+        handle_chat_aggregatedCompleteChat.__doc__ += config_info
 
 
 # Apply dynamic docstring updates

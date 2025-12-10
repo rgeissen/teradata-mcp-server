@@ -14,17 +14,17 @@ Chat Completion tools let Teradata call [OpenAI‑compatible ChatCompletion tabl
 - OpenAI‑compatible Java Table Operator `CompleteChat` installed in a database (for example, `openai_client.CompleteChat`).
 - MCP server configured with:
   - Valid Teradata connection.
-  - `chat_cmplt_config.yml` in `src/teradata_mcp_server/config/`.
+  - `chat_config.yml` in `src/teradata_mcp_server/config/`.
 
 Optional:
 
-- Environment variable `CHAT_CMPLT_API_KEY` if your inference server requires an API key.
+- Environment variable `CHAT_API_KEY` if your inference server requires an API key.
 
 ---
 
 ## Available tools
 
-### `chat_cmplt_completeChat`
+### `chat_completeChat`
 
 **What it does**
 
@@ -56,7 +56,7 @@ Executes the `CompleteChat` table operator over a user‑supplied SQL query that
   - Normalizes whitespace.
   - Removes a trailing `;` if present.
 - Escapes the system message for safe use inside Teradata SQL.
-- Builds a `CompleteChat` call using configuration from `chat_cmplt_config.yml`.
+- Builds a `CompleteChat` call using configuration from `chat_config.yml`.
 - Casts `response_txt` to `VARCHAR(output_text_length)` (UNICODE) where `output_text_length` comes from config.
 - Returns a JSON payload containing:
   - `results`: one row per input row with at least `response_txt` and the original columns.
@@ -64,7 +64,7 @@ Executes the `CompleteChat` table operator over a user‑supplied SQL query that
 
 **Configuration**
 
-Reads from `chat_cmplt_config.yml`. Key fields:
+Reads from `chat_config.yml`. Key fields:
 
 - **Connection / routing**
   - `base_url` *(required)* – URL of the inference server (e.g. `http://localhost:11434` or `https://api.openai.com`).
@@ -73,7 +73,7 @@ Reads from `chat_cmplt_config.yml`. Key fields:
   - `ignore_https_verification` *(optional, default `false`)* – disable TLS verification (dev/test only).
 
 - **Authentication**
-  - Environment variable `CHAT_CMPLT_API_KEY` *(optional)* – if set, used as `Authorization: Bearer <APIKEY>`.
+  - Environment variable `CHAT_API_KEY` *(optional)* – if set, used as `Authorization: Bearer <APIKEY>`.
 
 - **Request options**
   - `custom_headers` – list of `{ key, value }` HTTP headers.
@@ -104,7 +104,7 @@ Reads from `chat_cmplt_config.yml`. Key fields:
 
 ---
 
-### `chat_cmplt_aggregatedCompleteChat`
+### `chat_aggregatedCompleteChat`
 
 **What it does**
 
@@ -114,7 +114,7 @@ Runs `CompleteChat` over a dataset and **aggregates** the outputs to show unique
 
 - Count how many rows are classified into each category (e.g. sentiment labels).
 - Analyze main reasons or topics in feedback at a high level.
-- Combine with prompts (for example, `chat_cmplt_ai_mapreduce`) to build map‑reduce workflows.
+- Combine with prompts (for example, `chat_ai_mapreduce`) to build map‑reduce workflows.
 
 **Inputs (tool parameters)**
 
@@ -126,7 +126,7 @@ Runs `CompleteChat` over a dataset and **aggregates** the outputs to show unique
 
 **Behavior**
 
-- Uses the same configuration and SQL‑preparation pipeline as `chat_cmplt_completeChat`.
+- Uses the same configuration and SQL‑preparation pipeline as `chat_completeChat`.
 - Internally calls `CompleteChat`, then runs an aggregation query:
   - Filters out `NULL` and empty `response_txt` values.
   - Groups by `response_txt`.
@@ -137,20 +137,20 @@ Runs `CompleteChat` over a dataset and **aggregates** the outputs to show unique
 
 **Error handling**
 
-- Shares the same mandatory config validation as `chat_cmplt_completeChat`.
+- Shares the same mandatory config validation as `chat_completeChat`.
 - On configuration errors, returns `status: "error"` and `error_type: "configuration_error"` and does not execute SQL.
 
 ---
 
 ## Prompts
 
-The `chat_cmplt` module also includes MCP prompts that orchestrate multi‑step workflows using these tools (for example, building an SQL query, running aggregated completion, and then synthesizing a final answer). These prompts are defined in the module’s YAML objects and are discovered by the MCP server at startup.
+The `chat` module also includes MCP prompts that orchestrate multi‑step workflows using these tools (for example, building an SQL query, running aggregated completion, and then synthesizing a final answer). These prompts are defined in the module's YAML objects and are discovered by the MCP server at startup.
 
 ---
 
 ## Configuration file
 
-Chat Completion tools read their configuration from: `text src/teradata_mcp_server/config/chat_cmplt_config.yml`
+Chat Completion tools read their configuration from: `text src/teradata_mcp_server/config/chat_config.yml`
 
 
 You must set at least:

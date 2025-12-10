@@ -64,7 +64,7 @@ def create_mcp_app(settings: Settings):
     enableEFS = True if any(re.match(pattern, 'fs_*') for pattern in config.get('tool', [])) else False
     enableTDVS = True if any(re.match(pattern, 'tdvs_*') for pattern in config.get('tool', [])) else False
     enableBAR = True if any(re.match(pattern, 'bar_*') for pattern in config.get('tool', [])) else False
-    enableChatCmplt = True if any(re.match(pattern, 'chat_cmplt_*') for pattern in config.get('tool', [])) else False
+    enableChat = True if any(re.match(pattern, 'chat_*') for pattern in config.get('tool', [])) else False
 
     # Initialize TD connection and optional teradataml/EFS context
     # Pass settings object to TDConn instead of just connection_url
@@ -130,15 +130,15 @@ def create_mcp_app(settings: Settings):
             enableBAR = False
 
     # Chat Completion module validation (optional)
-    if enableChatCmplt:
+    if enableChat:
         try:
-            from teradata_mcp_server.tools.chat_cmplt.chat_cmplt_tools import load_chat_cmplt_config
-            
-            # Test 1: Check if base_url and model are set in chat_cmplt_config.yml
-            chat_cmplt_config = load_chat_cmplt_config()
-            base_url = chat_cmplt_config.get("base_url", "").strip()
-            model = chat_cmplt_config.get("model", "").strip()
-            function_db = chat_cmplt_config.get("databases", {}).get("function_db", "").strip()
+            from teradata_mcp_server.tools.chat.chat_tools import load_chat_config
+
+            # Test 1: Check if base_url and model are set in chat_config.yml
+            chat_config = load_chat_config()
+            base_url = chat_config.get("base_url", "").strip()
+            model = chat_config.get("model", "").strip()
+            function_db = chat_config.get("databases", {}).get("function_db", "").strip()
             
             if not base_url or not model:
                 logger.warning(
@@ -147,13 +147,13 @@ def create_mcp_app(settings: Settings):
                     f"model: {'set' if model else 'not set'}) - "
                     f"disabling chat completion functionality"
                 )
-                enableChatCmplt = False
+                enableChat = False
             elif not function_db:
                 logger.warning(
                     "Chat completion config missing function database "
                     "(databases.function_db not set) - disabling chat completion functionality"
                 )
-                enableChatCmplt = False
+                enableChat = False
             else:
                 # Tests 2 & 3: Check database function existence and permissions
                 # Only perform these if we can establish a connection
@@ -184,7 +184,7 @@ def create_mcp_app(settings: Settings):
                                     f"CompleteChat function not found in database '{function_db}' - "
                                     f"disabling chat completion functionality"
                                 )
-                                enableChatCmplt = False
+                                enableChat = False
                             else:
                                 # Test 3: Check if current user has execute permission on CompleteChat
                                 # This includes: direct function grants, database-level grants, and role-based grants
@@ -215,7 +215,7 @@ def create_mcp_app(settings: Settings):
                                         f"on {function_db}.CompleteChat (checked direct grants, database-level grants, and role-based grants) - "
                                         f"disabling chat completion functionality"
                                     )
-                                    enableChatCmplt = False
+                                    enableChat = False
                                 else:
                                     logger.info(
                                         f"Chat completion module validated successfully "
@@ -234,10 +234,10 @@ def create_mcp_app(settings: Settings):
                     
         except (AttributeError, ImportError, ModuleNotFoundError) as e:
             logger.warning(f"Chat completion module not available - disabling chat completion functionality: {e}")
-            enableChatCmplt = False
+            enableChat = False
         except Exception as e:
             logger.warning(f"Error loading chat completion config - disabling chat completion functionality: {e}")
-            enableChatCmplt = False
+            enableChat = False
 
     # Middleware (auth + request context)
     from teradata_mcp_server.tools.auth_cache import SecureAuthCache
@@ -470,7 +470,7 @@ def create_mcp_app(settings: Settings):
                 logger.info(f"Skipping BAR tool: {tool_name} (BAR functionality disabled)")
                 continue
             # Skip chat completion tools if chat completion functionality is disabled
-            if tool_name.startswith("chat_cmplt_") and not enableChatCmplt:
+            if tool_name.startswith("chat_") and not enableChat:
                 logger.info(f"Skipping chat completion tool: {tool_name} (chat completion functionality disabled)")
                 continue
             wrapped = make_tool_wrapper(func)
