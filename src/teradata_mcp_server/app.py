@@ -46,6 +46,13 @@ def create_mcp_app(settings: Settings):
     """Create and configure the FastMCP app with middleware, tools, prompts, resources."""
     logger = setup_logging(settings.logging_level, settings.mcp_transport)
 
+    # Set global config directory for layered configuration loading
+    from pathlib import Path
+    from teradata_mcp_server import config_loader
+    config_dir = Path(settings.config_dir).resolve() if settings.config_dir else Path.cwd()
+    config_loader.set_global_config_dir(config_dir)
+    logger.info(f"Configuration directory set to: {config_dir}")
+
     # Load tool module loader via teradata tools package
     try:
         from teradata_mcp_server import tools as td
@@ -529,8 +536,10 @@ def create_mcp_app(settings: Settings):
 
             mcp.tool(name=func_name, description=doc_string)(func)
 
-    # Load YAML-defined tools/resources/prompts
-    custom_object_files = [file for file in os.listdir() if file.endswith("_objects.yml")]
+    # Load YAML-defined tools/resources/prompts from config directory
+    custom_object_files = [config_dir / file for file in os.listdir(config_dir) if file.endswith("_objects.yml")]
+    if custom_object_files:
+        logger.info(f"Found {len(custom_object_files)} custom object files in config directory: {[f.name for f in custom_object_files]}")
     if module_loader and profile_name:
         profile_yml_files = module_loader.get_required_yaml_paths()
         custom_object_files.extend(profile_yml_files)

@@ -10,25 +10,6 @@ from teradatasql import TeradataConnection
 
 logger = logging.getLogger("teradata_mcp_server")
 
-# Load RAG configuration
-def load_rag_config():
-    """Load RAG configuration from rag_config.yml"""
-    try:
-        # Get the directory path
-        current_dir = Path(__file__).parent
-        # Go to config/
-        config_path = current_dir.parent.parent / 'config' / 'rag_config.yml'
-        
-        with open(config_path, 'r') as file:
-            logger.info(f"Loading RAG config from: {config_path}")
-            return yaml.safe_load(file)
-    except FileNotFoundError:
-        logger.warning(f"RAG config file not found: {config_path}, using defaults")
-        return get_default_rag_config()
-    except Exception as e:
-        logger.error(f"Error loading RAG config: {e}")
-        return get_default_rag_config()
-
 def get_default_rag_config():
     """Default RAG configuration as fallback"""
     return {
@@ -63,6 +44,36 @@ def get_default_rag_config():
             'feature_columns': '[emb_0:emb_383]'
         }
     }
+
+
+def load_rag_config():
+    """
+    Load RAG configuration using the layered strategy.
+
+    Loads from:
+    1. Default values (in code)
+    2. Packaged src/teradata_mcp_server/config/rag_config.yml (developer defaults)
+    3. User config directory rag_config.yml (runtime overrides)
+
+    Returns:
+        Merged configuration dictionary
+    """
+    try:
+        from teradata_mcp_server import config_loader
+
+        # Load configuration (uses global config directory)
+        config = config_loader.load_config(
+            "rag_config.yml",
+            defaults=get_default_rag_config()
+        )
+
+        logger.info("RAG configuration loaded successfully")
+        return config
+
+    except Exception as e:
+        logger.error(f"Error loading RAG config: {e}", exc_info=True)
+        return get_default_rag_config()
+
 
 # Load config at module level
 RAG_CONFIG = load_rag_config()

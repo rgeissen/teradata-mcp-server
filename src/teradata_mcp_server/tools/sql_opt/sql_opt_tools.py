@@ -53,25 +53,6 @@ def create_response(data: Any, metadata: dict[str, Any] | None = None) -> str:
     return json.dumps(response, default=serialize_teradata_types)
 
 
-# Load SQL Clustering configuration
-def load_sql_clustering_config():
-    """Load SQL clustering configuration from sql_opt_config.yml"""
-    try:
-        # Get the directory path
-        current_dir = Path(__file__).parent
-        # Go to config/
-        config_path = current_dir.parent.parent / 'config' / 'sql_opt_config.yml'
-        
-        with open(config_path, 'r') as file:
-            logger.info(f"Loading SQL clustering config from: {config_path}")
-            return yaml.safe_load(file)
-    except FileNotFoundError:
-        logger.warning(f"SQL clustering config file not found: {config_path}, using defaults")
-        return get_default_sql_clustering_config()
-    except Exception as e:
-        logger.error(f"Error loading SQL clustering config: {e}")
-        return get_default_sql_clustering_config()
-
 def get_default_sql_clustering_config():
     """Default SQL clustering configuration as fallback"""
     return {
@@ -107,6 +88,36 @@ def get_default_sql_clustering_config():
             'pad_to_max_length': 'False'
         }
     }
+
+
+def load_sql_clustering_config():
+    """
+    Load SQL clustering configuration using the layered strategy.
+
+    Loads from:
+    1. Default values (in code)
+    2. Packaged src/teradata_mcp_server/config/sql_opt_config.yml (developer defaults)
+    3. User config directory sql_opt_config.yml (runtime overrides)
+
+    Returns:
+        Merged configuration dictionary
+    """
+    try:
+        from teradata_mcp_server import config_loader
+
+        # Load configuration (uses global config directory)
+        config = config_loader.load_config(
+            "sql_opt_config.yml",
+            defaults=get_default_sql_clustering_config()
+        )
+
+        logger.info("SQL clustering configuration loaded successfully")
+        return config
+
+    except Exception as e:
+        logger.error(f"Error loading SQL clustering config: {e}", exc_info=True)
+        return get_default_sql_clustering_config()
+
 
 # Load config
 SQL_CLUSTERING_CONFIG = load_sql_clustering_config()

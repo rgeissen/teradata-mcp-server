@@ -187,65 +187,52 @@ def resolve_type_hint(type_hint):
 
 # -------------------- Configuration loading -------------------- #
 def load_profiles(working_dir: Optional[Path] = None) -> Dict[str, Any]:
-    """Load packaged profiles.yml, then working directory profiles.yml (overrides)."""
-    if working_dir is None:
-        working_dir = Path.cwd()
-    
-    profiles = {}
-    
-    # Load packaged profiles.yml
-    try:
-        import importlib.resources
-        try:
-            # Try the new importlib.resources API (Python 3.9+)
-            config_files = importlib.resources.files("teradata_mcp_server.config")
-            profiles_file = config_files / "profiles.yml"
-            logger.debug(f"Looking for packaged profiles at: {profiles_file}")
-            if profiles_file.is_file():
-                packaged_profiles = yaml.safe_load(profiles_file.read_text(encoding='utf-8')) or {}
-                profiles.update(packaged_profiles)
-                logger.info(f"Loaded {len(packaged_profiles)} packaged profiles: {list(packaged_profiles.keys())}")
-            else:
-                logger.warning(f"Packaged profiles.yml not found at: {profiles_file}")
-        except AttributeError:
-            # Fallback for older Python versions
-            import importlib.resources as resources
-            with resources.path("teradata_mcp_server.config", "profiles.yml") as profiles_path:
-                logger.debug(f"Looking for packaged profiles at: {profiles_path}")
-                if profiles_path.exists():
-                    packaged_profiles = yaml.safe_load(profiles_path.read_text(encoding='utf-8')) or {}
-                    profiles.update(packaged_profiles)
-                    logger.info(f"Loaded {len(packaged_profiles)} packaged profiles: {list(packaged_profiles.keys())}")
-                else:
-                    logger.warning(f"Packaged profiles.yml not found at: {profiles_path}")
-    except Exception as e:
-        logger.error(f"Failed to load packaged profiles: {e}", exc_info=True)
-    
-    # Load working directory profiles.yml (overrides packaged)
-    profiles_path = working_dir / "profiles.yml"
-    if profiles_path.exists():
-        try:
-            with open(profiles_path, encoding='utf-8') as f:
-                working_dir_profiles = yaml.safe_load(f) or {}
-                profiles.update(working_dir_profiles)
-                logger.info(f"Loaded {len(working_dir_profiles)} working directory profiles: {list(working_dir_profiles.keys())}")
-        except Exception as e:
-            logger.error(f"Failed to load external profiles: {e}")
-    else:
-        logger.debug(f"No working directory profiles.yml found at: {profiles_path}")
-    
+    """
+    Load profiles using the layered configuration strategy.
+
+    Uses config_loader to load from:
+    1. Packaged src/teradata_mcp_server/config/profiles.yml (developer defaults)
+    2. User config directory profiles.yml (runtime overrides)
+
+    Args:
+        working_dir: Deprecated parameter for backwards compatibility.
+                     Now uses the global config directory set by config_loader.
+
+    Returns:
+        Merged profiles dictionary
+    """
+    from teradata_mcp_server import config_loader
+
+    # Load configuration (uses global config directory set in app.py)
+    profiles = config_loader.load_config("profiles.yml")
+
     logger.info(f"Total profiles loaded: {list(profiles.keys())}")
     return profiles
 
 
 def load_all_objects(working_dir: Optional[Path] = None) -> Dict[str, Any]:
-    """Load all src/tools/*/*.yml, then working directory *.yml (overrides)."""
-    if working_dir is None:
-        working_dir = Path.cwd()
-    
+    """
+    Load all MCP objects (tools, prompts, etc.) using the layered configuration strategy.
+
+    Loads from:
+    1. Packaged src/tools/*/*.yml files (developer defaults)
+    2. User config directory *.yml files (runtime overrides)
+
+    Args:
+        working_dir: Deprecated parameter for backwards compatibility.
+                     Now uses the global config directory set by config_loader.
+
+    Returns:
+        Dictionary of all loaded objects
+    """
+    from teradata_mcp_server import config_loader
+
+    # Use global config directory (set in app.py)
+    config_dir = config_loader.get_global_config_dir()
+
     objects = {}
     allowed_types = {'tool', 'cube', 'prompt', 'glossary'}
-    
+
     # Load packaged YAML files from src/tools/*/*.yml
     try:
         tools_pkg_root = pkg_files("teradata_mcp_server").joinpath("tools")
@@ -257,28 +244,33 @@ def load_all_objects(working_dir: Optional[Path] = None) -> Dict[str, Any]:
                             try:
                                 loaded = yaml.safe_load(yml_file.read_text(encoding='utf-8')) or {}
                                 # Filter by allowed object types
-                                filtered = {k: v for k, v in loaded.items() 
+                                filtered = {k: v for k, v in loaded.items()
                                           if isinstance(v, dict) and v.get('type') in allowed_types}
                                 objects.update(filtered)
                             except Exception as e:
                                 logger.error(f"Failed to load {yml_file}: {e}")
     except Exception as e:
         logger.error(f"Failed to load packaged YAML files: {e}")
-    
-    # Load working directory *.yml files (overrides packaged)
-    for yml_file in working_dir.glob("*.yml"):
-        if yml_file.name == "profiles.yml":  # Skip profiles.yml
+
+    # Load user config directory *.yml files (overrides packaged)
+    # Skip special config files like profiles.yml, chat_config.yml, etc.
+    skip_files = {'profiles.yml', 'chat_config.yml', 'rag_config.yml', 'sql_opt_config.yml'}
+
+    for yml_file in config_dir.glob("*.yml"):
+        if yml_file.name in skip_files:
             continue
         try:
             with open(yml_file, encoding='utf-8') as f:
                 loaded = yaml.safe_load(f) or {}
                 # Filter by allowed object types
-                filtered = {k: v for k, v in loaded.items() 
+                filtered = {k: v for k, v in loaded.items()
                           if isinstance(v, dict) and v.get('type') in allowed_types}
-                objects.update(filtered)
+                if filtered:
+                    objects.update(filtered)
+                    logger.info(f"Loaded {len(filtered)} objects from user config: {yml_file.name}")
         except Exception as e:
             logger.error(f"Failed to load {yml_file}: {e}")
-    
+
     logger.info(f"Loaded {len(objects)} total objects")
     return objects
 

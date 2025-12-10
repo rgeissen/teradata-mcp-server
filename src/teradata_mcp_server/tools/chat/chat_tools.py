@@ -82,21 +82,29 @@ def _validate_chat_config(config: dict) -> bool:
 
 
 def load_chat_config():
-    """Load chat completion configuration from chat_config.yml"""
-    try:
-        current_dir = Path(__file__).parent
-        config_path = current_dir.parent.parent / "config" / "chat_config.yml"
+    """
+    Load chat completion configuration using the layered strategy.
 
-        with open(config_path, "r") as file:
-            logger.info(f"Loading chat completion config from: {config_path}")
-            loaded = yaml.safe_load(file) or {}
-            # if you applied the validation / deep-merge logic, keep it here
-            return loaded
-    except FileNotFoundError:
-        logger.warning(
-            f"Chat completion config file not found: {config_path}, using defaults"
+    Loads from:
+    1. Default values (in code)
+    2. Packaged src/teradata_mcp_server/config/chat_config.yml (developer defaults)
+    3. User config directory chat_config.yml (runtime overrides)
+
+    Returns:
+        Merged configuration dictionary
+    """
+    try:
+        from teradata_mcp_server import config_loader
+
+        # Load configuration (uses global config directory)
+        config = config_loader.load_config(
+            "chat_config.yml",
+            defaults=get_default_chat_config()
         )
-        return get_default_chat_config()
+
+        logger.info("Chat completion configuration loaded successfully")
+        return config
+
     except Exception as e:
         logger.error(f"Error loading chat completion config: {e}", exc_info=True)
         return get_default_chat_config()
