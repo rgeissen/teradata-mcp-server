@@ -18,7 +18,8 @@ def parse_args_to_settings() -> Settings:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument('-v', '--version', action='version', version=f'%(prog)s {__version__}')
-    parser.add_argument('--profile', type=str, required=False)
+    parser.add_argument('--profile', type=str, required=False, help='Profile name to load from profiles.yml')
+    parser.add_argument('--config_dir', type=str, required=False, help='Directory for user configuration files (default: current working directory)')
     parser.add_argument('--mcp_transport', type=str, choices=['stdio', 'streamable-http', 'sse'], required=False)
     parser.add_argument('--mcp_host', type=str, required=False)
     parser.add_argument('--mcp_port', type=int, required=False)
@@ -35,6 +36,7 @@ def parse_args_to_settings() -> Settings:
     return Settings(
         profile=args.profile if args.profile is not None else env.profile,
         database_uri=args.database_uri if args.database_uri is not None else env.database_uri,
+        config_dir=args.config_dir if args.config_dir is not None else env.config_dir,
         mcp_transport=(args.mcp_transport or env.mcp_transport).lower(),
         mcp_host=args.mcp_host if args.mcp_host is not None else env.mcp_host,
         mcp_port=args.mcp_port if args.mcp_port is not None else env.mcp_port,
