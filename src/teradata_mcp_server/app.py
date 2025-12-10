@@ -64,6 +64,7 @@ def create_mcp_app(settings: Settings):
     enableEFS = True if any(re.match(pattern, 'fs_*') for pattern in config.get('tool', [])) else False
     enableTDVS = True if any(re.match(pattern, 'tdvs_*') for pattern in config.get('tool', [])) else False
     enableBAR = True if any(re.match(pattern, 'bar_*') for pattern in config.get('tool', [])) else False
+    enableChatCmplt = True if any(re.match(pattern, 'chat_cmplt_*') for pattern in config.get('tool', [])) else False
 
     # Initialize TD connection and optional teradataml/EFS context
     # Pass settings object to TDConn instead of just connection_url
@@ -127,6 +128,116 @@ def create_mcp_app(settings: Settings):
         except (AttributeError, ImportError, ModuleNotFoundError) as e:
             logger.warning(f"BAR system dependencies not available - disabling BAR functionality: {e}")
             enableBAR = False
+
+    # Chat Completion module validation (optional)
+    if enableChatCmplt:
+        try:
+            from teradata_mcp_server.tools.chat_cmplt.chat_cmplt_tools import load_chat_cmplt_config
+            
+            # Test 1: Check if base_url and model are set in chat_cmplt_config.yml
+            chat_cmplt_config = load_chat_cmplt_config()
+            base_url = chat_cmplt_config.get("base_url", "").strip()
+            model = chat_cmplt_config.get("model", "").strip()
+            function_db = chat_cmplt_config.get("databases", {}).get("function_db", "").strip()
+            
+            if not base_url or not model:
+                logger.warning(
+                    f"Chat completion config missing required parameters "
+                    f"(base_url: {'set' if base_url else 'not set'}, "
+                    f"model: {'set' if model else 'not set'}) - "
+                    f"disabling chat completion functionality"
+                )
+                enableChatCmplt = False
+            elif not function_db:
+                logger.warning(
+                    "Chat completion config missing function database "
+                    "(databases.function_db not set) - disabling chat completion functionality"
+                )
+                enableChatCmplt = False
+            else:
+                # Tests 2 & 3: Check database function existence and permissions
+                # Only perform these if we can establish a connection
+                try:
+                    # Check if connection is available
+                    if not getattr(tdconn, "engine", None):
+                        logger.info(
+                            f"Chat completion module config validated (base_url, model, function_db set). "
+                            f"Database checks (function existence and permissions) will be skipped in stdio mode - "
+                            f"they will be validated on first tool use."
+                        )
+                    else:
+                        with tdconn.engine.connect() as conn:
+                            from sqlalchemy import text
+                            
+                            # Test 2: Check if CompleteChat function exists in configured database
+                            check_function_sql = text(f"""
+                                SELECT 1 
+                                FROM DBC.FunctionsV 
+                                WHERE DatabaseName = '{function_db}' 
+                                AND FunctionName = 'CompleteChat'
+                            """)
+                            result = conn.execute(check_function_sql)
+                            function_exists = result.fetchone() is not None
+                            
+                            if not function_exists:
+                                logger.warning(
+                                    f"CompleteChat function not found in database '{function_db}' - "
+                                    f"disabling chat completion functionality"
+                                )
+                                enableChatCmplt = False
+                            else:
+                                # Test 3: Check if current user has execute permission on CompleteChat
+                                # This includes: direct function grants, database-level grants, and role-based grants
+                                
+                                # First, get current username
+                                username_result = conn.execute(text("SELECT USER"))
+                                current_user = username_result.fetchone()[0]
+                                
+                                check_permission_sql = text(f"""
+                                    SELECT 1
+                                    FROM DBC.AllRightsV
+                                    WHERE UPPER(UserName) = UPPER('{current_user}')
+                                    AND UPPER(DatabaseName) = UPPER('{function_db}')
+                                    AND (
+                                        -- Case 1: Direct grant on the function itself
+                                        (UPPER(TableName) = UPPER('CompleteChat') AND AccessRight = 'EF')
+                                        OR
+                                        -- Case 2: Database-level execute function grant
+                                        (TableName = 'All' AND AccessRight = 'EF')
+                                    )
+                                """)
+                                result = conn.execute(check_permission_sql)
+                                has_permission = result.fetchone() is not None
+                                
+                                if not has_permission:
+                                    logger.warning(
+                                        f"User '{current_user}' does not have EXECUTE FUNCTION permission "
+                                        f"on {function_db}.CompleteChat (checked direct grants, database-level grants, and role-based grants) - "
+                                        f"disabling chat completion functionality"
+                                    )
+                                    enableChatCmplt = False
+                                else:
+                                    logger.info(
+                                        f"Chat completion module validated successfully "
+                                        f"(user: {current_user}, base_url: {base_url[:30]}..., model: {model}, "
+                                        f"function: {function_db}.CompleteChat)"
+                                    )
+                except (AttributeError, Exception) as db_error:
+                    # In stdio mode, connection might not be available at startup
+                    # Log info instead of warning and allow tools to load
+                    # They will fail at runtime if there are actual permission issues
+                    logger.info(
+                        f"Chat completion config validated (base_url, model, function_db set). "
+                        f"Database validation skipped (connection not available at startup): {db_error}. "
+                        f"Function existence and permissions will be validated on first tool use."
+                    )
+                    
+        except (AttributeError, ImportError, ModuleNotFoundError) as e:
+            logger.warning(f"Chat completion module not available - disabling chat completion functionality: {e}")
+            enableChatCmplt = False
+        except Exception as e:
+            logger.warning(f"Error loading chat completion config - disabling chat completion functionality: {e}")
+            enableChatCmplt = False
 
     # Middleware (auth + request context)
     from teradata_mcp_server.tools.auth_cache import SecureAuthCache
@@ -357,6 +468,10 @@ def create_mcp_app(settings: Settings):
             # Skip BAR tools if BAR functionality is disabled
             if tool_name.startswith("bar_") and not enableBAR:
                 logger.info(f"Skipping BAR tool: {tool_name} (BAR functionality disabled)")
+                continue
+            # Skip chat completion tools if chat completion functionality is disabled
+            if tool_name.startswith("chat_cmplt_") and not enableChatCmplt:
+                logger.info(f"Skipping chat completion tool: {tool_name} (chat completion functionality disabled)")
                 continue
             wrapped = make_tool_wrapper(func)
             mcp.tool(name=tool_name, description=wrapped.__doc__)(wrapped)

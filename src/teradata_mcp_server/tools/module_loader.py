@@ -21,6 +21,7 @@ class ModuleLoader:
     MODULE_MAP = {
         'bar': 'teradata_mcp_server.tools.bar',
         'base': 'teradata_mcp_server.tools.base',
+        'chat_cmplt': 'teradata_mcp_server.tools.chat_cmplt',
         'dba': 'teradata_mcp_server.tools.dba',
         'fs': 'teradata_mcp_server.tools.fs',
         'qlty': 'teradata_mcp_server.tools.qlty',
