@@ -292,35 +292,61 @@ dba_databaseHealthAssessment :
   type: prompt
   description: "You are a Teradata DBA who is an expert in assessing the health of a database. (prompt_type: reporting)"
   prompt: |
-    Generate a comprehensive Teradata system health dashboard for the last 30 days, structured as an executive summary followed by detailed technical analysis. Create a visual dashboard using tables, charts, and color-coded indicators to highlight critical metrics and resource constraints. 
+    Generate a comprehensive Teradata system health dashboard for the last 30 days, structured as an executive summary followed by detailed technical analysis.
 
-    Executive Summary Section: 
-    * System overview with key performance indicators  (number of databases, number of tables, number of views, number of macros, number of user defined views, number of users and space utilization percentages) 
-    * Critical alerts highlighting databases/tables approaching space limits (use red for >85% utilization, yellow for >70%) 
-    * Top 5 resource consumption trends and usage patterns 
+    ## Phase 1 - Get list of databases
+    Use base_databaseList tool with scope='{database_scope}' to get a list of databases.
+    Create a list of database names for the phases below.
+    Also use dba_databaseSpace tool to get space usage metrics across all databases.
 
-    Detailed Technical Analysis: 
-    * Current database version and system configuration 
-    * Complete space utilization breakdown across all databases with visual charts 
-    * Top 10 space-consuming tables with growth trends and utilization percentages 
-    * CPU Resource usage heatmaps showing patterns by weekday and hour of day 
-    * IO Resource usage heatmaps showing patterns by weekday and hour of day 
-    * Memory Resource usage heatmaps showing patterns by weekday and hour of day 
-    * Flow control metrics and user delay analysis with performance bottleneck identification 
-    * Database and table activity rankings showing most frequently accessed objects 
-    * User activity patterns and resource impact analysis 
+    ## Phase 2 - Resource usage analysis for the last 30 days
+    Use dba_resusageSummary tool to gather CPU, IO, and Memory resource usage patterns for the last 30 days.
+    Collect both summary dimensions and heatmap dimensions (by weekday and hour of day).
 
-    Formatting Requirements: 
-    * Use color coding: Red (critical/>85%), Yellow (warning/70-85%), Green (healthy/<70%) 
-    * Include bar charts for space utilization and usage patterns 
-    * Present data in sortable tables with key metrics highlighted 
-    * Add trend indicators (arrows/percentages) for changing metrics 
-    * Target audience: DBA management and Teradata system owners 
+    ## Phase 3 - Flow control analysis for the last 30 days
+    Use dba_flowControl tool to gather flow control metrics for the last 30 days.
+    The tool accepts start_date and end_date parameters in YYYY-MM-DD format.
+
+    ## Phase 4 - User delay analysis for the last 30 days
+    Use dba_userDelay tool to gather user delay data for the last 30 days.
+    The tool accepts start_date and end_date parameters in YYYY-MM-DD format.
+
+    ## Phase 5 - Database-level detail
+    Cycle through the list of databases from Phase 1, for each database do the following steps in order:
+    Step 1. Use base_tableList tool to get a list of tables in the database
+    Step 2. Use base_tableUsage tool to get table activity and access patterns
+
+    ## Phase 6 - Present results as a dashboard
+    Generate a comprehensive dashboard using the data from all phases above.
+
+    Executive Summary Section:
+    * System overview with key performance indicators (number of databases, number of tables, space utilization percentages)
+    * Critical alerts highlighting databases/tables approaching space limits (use red for >85% utilization, yellow for >70%)
+    * Top 5 resource consumption trends and usage patterns
+
+    Detailed Technical Analysis:
+    * Complete space utilization breakdown across all databases with visual charts
+    * Top 10 space-consuming tables with growth trends and utilization percentages
+    * CPU Resource usage heatmaps showing patterns by weekday and hour of day
+    * IO Resource usage heatmaps showing patterns by weekday and hour of day
+    * Memory Resource usage heatmaps showing patterns by weekday and hour of day
+    * Flow control metrics and user delay analysis with performance bottleneck identification
+    * Database and table activity rankings showing most frequently accessed objects
+
+    Formatting Requirements:
+    * Use color coding: Red (critical/>85%), Yellow (warning/70-85%), Green (healthy/<70%)
+    * Include bar charts for space utilization and usage patterns
+    * Present data in sortable tables with key metrics highlighted
+    * Add trend indicators (arrows/percentages) for changing metrics
+    * Target audience: DBA management and Teradata system owners
     * Focus on informational assessment rather than actionable recommendation
     * Ensure that dashboard is mobile friendly and scales easily
-
-    Think through the problem.
-
+  parameters:
+    database_scope:
+      name: database_scope
+      description: "Scope of databases to include: 'user' for user-created databases only (excludes system databases), 'all' for all databases including system databases."
+      required: true
+      type_hint: str
 
 dba_userActivityAnalysis:
   type: prompt
