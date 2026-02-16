@@ -59,6 +59,10 @@ def handle_dba_userSqlList(conn: TeradataConnection, user_name: str, no_days: st
     """
     logger.debug(f"Tool: handle_dba_userSqlList: Args: user_name: {user_name}")
 
+    # Treat wildcards as "all users" (planner may pass * or % instead of omitting)
+    if user_name and user_name.strip() in ("*", "%"):
+        user_name = ""
+
     with conn.cursor() as cur:
         if user_name == "":
             logger.debug("No user name provided, returning all SQL queries.")
@@ -271,6 +275,10 @@ def handle_dba_resusageSummary(conn: TeradataConnection,
     """
     logger.debug(f"Tool: handle_dba_resusageSummary: Args: dimensions: {dimensions}")
 
+    # Treat wildcards as "all users" (planner may pass * or % instead of omitting)
+    if user_name and user_name.strip() in ("*", "%"):
+        user_name = None
+
     comment="Total system resource usage summary."
 
     # If dimensions is not None or empty, filter in the allowed dimensions
@@ -394,6 +402,13 @@ def handle_dba_tableUsageImpact(conn: TeradataConnection, database_name: str | N
 
     """
     logger.debug(f"Tool: handle_dba_tableUsageImpact: Args: database_name: {database_name}, user_name: {user_name}")
+
+    # Treat wildcards as "all" (planner may pass * or % instead of omitting)
+    if user_name and user_name.strip() in ("*", "%"):
+        user_name = None
+    if database_name and database_name.strip() in ("*", "%"):
+        database_name = None
+
     database_name_filter = f"AND objectdatabasename = '{database_name}'" if database_name else ""
     user_name_filter = f"AND username = '{user_name}'" if user_name else ""
     table_usage_sql="""
