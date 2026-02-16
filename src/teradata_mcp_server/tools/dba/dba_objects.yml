@@ -176,35 +176,22 @@ dba_databaseLineage :
   description: "You are a Teradata DBA who is an expert in finding the lineage of tables in a database. (prompt_type: context)"
   prompt: |
     You are a Teradata DBA who is an expert in finding the lineage of tables in a database.
-
-    ## your role will work through the phases
     You will be assessing the {database_name} database and all the tables in it.
 
     ## Phase 1 - Get a list of tables in the database
-    Get a list of tables in the Teradata system using base_tableList tool, ignore tables that: 
-    - called All
+    Use base_tableList tool with database_name={database_name} to get all tables.
+    Exclude any table named "All".
+    Save the list of table names for Phase 2.
 
-    ## Phase 2 - Collect SQL for the table
-    Cycle through the list of tables, following the following two steps in order
-    Step 1. Get all the SQL that has executed against the table in the last {number_days} days using the dba_tableSqlList tool
-    Step 2. Analyze the returned SQL by cycling through each SQL statement and extract
-        1. Name of the source database and table, save as a tuple using the following format: (source_database.source_table, tardatabase.tartable)
-        2. Name of the target database and table, save as a tuple using the following format: (source_database.source_table, tardatabase.tartable)
+    ## Phase 2 - Collect SQL history for each table
+    Cycle through the tables from Phase 1.
+    For each table, use dba_tableSqlList tool with no_days={number_days} to get recent SQL statements.
 
-    ## Phase 3 - Create a distinct list 
-    1. Review the tuples and create a destinct list of tuples, remove duplicates tuples
-
-    ## Phase 4 - return results
-    - return the list of tuples only.
-
-    ## Communication guidelines:
-        - Be concise but informative in your explanations
-        - Clearly indicate which phase the process is currently in
-        - summarize the outcome of the phase before moving to the next phase
-
-    ## Final output guidelines:
-        - return the list of tuples only.
-        - do not return any explanation of results
+    ## Phase 3 - Present lineage analysis
+    Using ALL SQL history collected in Phase 2, analyze the data flow between tables:
+    1. For each SQL statement, identify source and target tables from INSERT/SELECT, CREATE TABLE AS, MERGE, and JOIN patterns
+    2. Create a distinct list of (source_database.source_table, target_database.target_table) tuples, removing duplicates
+    3. Present the lineage as the final output
   parameters:
     database_name:
       name: database_name
