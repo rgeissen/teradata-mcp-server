@@ -224,7 +224,7 @@ dba_databaseLineage :
       name: number_days
       description: "Number of days to look back for SQL execution history (e.g., 7, 30, 90)."
       required: true
-      type_hint: str
+      type_hint: int
 
 dba_tableDropImpact:
   type: prompt
@@ -285,7 +285,7 @@ dba_tableDropImpact:
       name: number_days
       description: "Number of days to look back for SQL execution history (e.g., 7, 30, 90)."
       required: true
-      type_hint: str
+      type_hint: int
 
 
 dba_databaseHealthAssessment :
