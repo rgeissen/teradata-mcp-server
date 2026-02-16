@@ -244,11 +244,12 @@ dba_tableDropImpact:
        - table_deps: to track other user tables referenced alongside {table_name} and their counts
     2. For each SQL statement in the list:
        - Extract and count the username who executed it (add to user_counts)
-       - Parse the SQL text for references to other tables (add to table_deps). Apply these filters:
-         - EXCLUDE the target table itself ({database_name}.{table_name} in any case variation)
-         - EXCLUDE system tables and views (any table in the DBC database, e.g. DBC.QryLogV, DBC.AllSpaceV)
-         - EXCLUDE Teradata built-in analytic functions (TD_UnivariateStatistics, TD_ColumnSummary, TD_getRowsWithMissingValues, TD_CategoricalSummary, etc.)
-         - INCLUDE only actual user tables from databases other than DBC
+       - Parse the SQL text for references to other user tables (add to table_deps).
+         Only count tables that belong to user databases — do NOT count any of the following:
+         - The target table itself ({database_name}.{table_name} in any case variation)
+         - Any DBC system object (DBC.QryLogV, DBC.QryLogSqlV, DBC.AllSpaceV, DBC.Tables, DBC.DBQLObjTbl, etc.)
+         - Teradata built-in analytic functions (TD_UnivariateStatistics, TD_ColumnSummary, TD_getRowsWithMissingValues, etc.)
+         If a table name does not have a database prefix, assume it belongs to {database_name}.
     3. Merge case-insensitive duplicates (e.g. "Products" and "products" are the same table)
     4. Keep these counts for use in Phase 3
 
@@ -268,6 +269,7 @@ dba_tableDropImpact:
             | Table | tablename1 | count |
         - Sort the results by Usage Count in descending order
         - Include both users and dependent tables, with Type column indicating which is which
+        - The table must NOT contain DBC system objects or Teradata built-in functions
         - Do not include any additional explanation of results
   parameters:
     table_name:
