@@ -130,6 +130,10 @@ def handle_base_tableList(conn: TeradataConnection, database_name: str | None = 
     """
     logger.debug(f"Tool: handle_base_tableList: Args: database_name: {database_name}")
 
+    # Treat wildcards as "all" (planner may pass * or % instead of omitting)
+    if database_name and database_name.strip() in ("*", "%"):
+        database_name = None
+
     sql = "select TableName from dbc.TablesV tv where tv.TableKind in ('T','V', 'O', 'Q')"
     params = []
 
@@ -393,6 +397,11 @@ def handle_base_tableUsage(conn: TeradataConnection, database_name: str | None =
     """
 
     logger.debug("Tool: handle_base_tableUsage: Args: database_name:")
+
+    # Treat wildcards as "all" (planner may pass * or % instead of omitting)
+    if database_name and database_name.strip() in ("*", "%"):
+        database_name = None
+
     database_name_filter = f"AND objectdatabasename = '{database_name}'" if database_name else ""
 
     table_usage_sql="""

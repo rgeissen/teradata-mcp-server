@@ -161,6 +161,10 @@ def handle_dba_databaseSpace(conn: TeradataConnection, database_name: str | None
     """
     logger.debug(f"Tool: handle_dba_databaseSpace: Args: database_name: {database_name}")
 
+    # Treat wildcards as "all databases" (planner may pass * or % instead of omitting)
+    if database_name and database_name.strip() in ("*", "%"):
+        database_name = None
+
     database_name_filter = f"AND objectdatabasename = '{database_name}'" if database_name else ""
 
     with conn.cursor() as cur:
