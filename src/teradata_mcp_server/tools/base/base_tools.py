@@ -69,22 +69,42 @@ def handle_base_readQuery(
 
 #------------------ Tool  ------------------#
 # List databases tool
-def handle_base_databaseList(conn: TeradataConnection, *args, **kwargs):
+def handle_base_databaseList(conn: TeradataConnection, scope: str | None = None, *args, **kwargs):
     """
-    Lists all databases in the Teradata System.
+    Lists databases in the Teradata System.
+
+    Arguments:
+      scope - Filter scope: 'user' returns only user-created databases (excludes system databases), 'all' returns every database. Defaults to 'user' if not specified.
 
     Returns:
       ResponseType: formatted response with query results + metadata
     """
-    logger.debug("Tool: handle_base_databaseList: Args: None")
+    scope = (scope or "user").strip().lower()
+    logger.debug(f"Tool: handle_base_databaseList: Args: scope={scope}")
 
-    sql = "select DataBaseName, DECODE(DBKind, 'U', 'User', 'D','DataBase') as DBType, CommentString from dbc.DatabasesV dv where OwnerName <> 'PDCRADM'"
+    # System databases to exclude when scope is 'user'
+    system_dbs = (
+        "'DBC','SYSLIB','SystemFe','SYSUDTLIB','SYSJDBC','SYSSPATIAL',"
+        "'TD_SYSFNLIB','TDQCD','TDStats','TDPUSER','dbcmngr','Crashdumps',"
+        "'LockLogShredder','SYSBAR','SysAdmin','Sys_Calendar','EXTUSER',"
+        "'DEFAULT','All','PUBLIC','SQLJ','SYSUIF','TD_ANALYTICS_DB',"
+        "'TD_SERVER_DB','TD_SYSGPL','TDSYSFLOW','TDMaps','SAS_SYSFNLIB',"
+        "'TDBCMgmt','External_AP','PDCRAdmin','PDCRSTG','PDCRDATA',"
+        "'PDCRINFO','PDCRTPCD','PDCRADM','TD_DATASHARING_REPO',"
+        "'TD_METRIC_SVC','console','tdwm','val'"
+    )
+
+    if scope == "all":
+        sql = "SELECT DataBaseName, DECODE(DBKind, 'U', 'User', 'D', 'DataBase') AS DBType, CommentString FROM dbc.DatabasesV dv WHERE OwnerName <> 'PDCRADM'"
+    else:
+        sql = f"SELECT DataBaseName, DECODE(DBKind, 'U', 'User', 'D', 'DataBase') AS DBType, CommentString FROM dbc.DatabasesV dv WHERE OwnerName <> 'PDCRADM' AND DataBaseName NOT IN ({system_dbs}) AND DataBaseName NOT LIKE 'TDaaS%'"
 
     with conn.cursor() as cur:
         rows = cur.execute(sql)
         data = rows_to_json(cur.description, rows.fetchall())
         metadata = {
             "tool_name": "base_databaseList",
+            "scope": scope,
             "sql": sql,
             "columns": [
                 {"name": col[0], "type": col[1].__name__ if hasattr(col[1], '__name__') else str(col[1])}
