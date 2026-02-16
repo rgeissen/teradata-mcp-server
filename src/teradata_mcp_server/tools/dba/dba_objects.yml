@@ -240,21 +240,20 @@ dba_tableDropImpact:
     ## Phase 2 - Analyze Usage data
     Using the SQL list collected in Phase 1:
     1. Create two dictionaries:
-       - user_counts: to track usernames and their usage counts
-       - table_deps: to track dependent tables and their reference counts
+       - user_counts: to track distinct usernames and their query counts
+       - table_deps: to track other user tables referenced alongside {table_name} and their counts
     2. For each SQL statement in the list:
-       - Extract and count the username who executed it
-       - Identify and count any tables that depend on our target table
-    3. Keep these counts for use in Phase 3
+       - Extract and count the username who executed it (add to user_counts)
+       - Parse the SQL text for references to other tables (add to table_deps). Apply these filters:
+         - EXCLUDE the target table itself ({database_name}.{table_name} in any case variation)
+         - EXCLUDE system tables and views (any table in the DBC database, e.g. DBC.QryLogV, DBC.AllSpaceV)
+         - EXCLUDE Teradata built-in analytic functions (TD_UnivariateStatistics, TD_ColumnSummary, TD_getRowsWithMissingValues, TD_CategoricalSummary, etc.)
+         - INCLUDE only actual user tables from databases other than DBC
+    3. Merge case-insensitive duplicates (e.g. "Products" and "products" are the same table)
+    4. Keep these counts for use in Phase 3
 
-    ## Phase 3 - Create a distinct list
-    Using the user_counts and table_deps dictionaries from Phase 2:
-    1. Create a sorted list of unique entries combining:
-       - All usernames from user_counts (with their counts)
-       - All dependent table names from table_deps (with their counts)
-
-    ## Phase 4 - return results
-    - return the list of usernames and tablenames only.
+    ## Phase 3 - Return results
+    Return the combined list of users and dependent tables.
 
     ## Communication guidelines:
         - Be concise but informative in your explanations
