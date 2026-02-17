@@ -279,16 +279,19 @@ dba_databaseHealthAssessment :
     Also use dba_databaseSpace tool to get space usage metrics across all databases.
 
     ## Phase 2 - Resource usage analysis for the last 30 days
-    Use dba_resusageSummary tool to gather CPU, IO, and Memory resource usage patterns for the last 30 days.
-    Collect both summary dimensions and heatmap dimensions (by weekday and hour of day).
+    Use dba_resusageSummary tool with no_days=30 to gather CPU, IO, and Memory resource usage patterns.
+    The tool uses no_days to calculate the date range internally - do NOT pass a date parameter.
+    Call the tool twice:
+      1. First call with dimensions=["LogDate"] for the summary trend
+      2. Second call with dimensions=["dayOfWeek","hourOfDay"] for heatmap data (weekday x hour matrix)
 
     ## Phase 3 - Flow control analysis for the last 30 days
     Use dba_flowControl tool to gather flow control metrics for the last 30 days.
-    The tool accepts start_date and end_date parameters in YYYY-MM-DD format.
+    Pass start_date and end_date in YYYY-MM-DD format (start_date = today minus 30 days, end_date = today).
 
     ## Phase 4 - User delay analysis for the last 30 days
     Use dba_userDelay tool to gather user delay data for the last 30 days.
-    The tool accepts start_date and end_date parameters in YYYY-MM-DD format.
+    Pass start_date and end_date in YYYY-MM-DD format (start_date = today minus 30 days, end_date = today).
 
     ## Phase 5 - Database-level detail
     Cycle through the list of databases from Phase 1, for each database do the following steps in order:
