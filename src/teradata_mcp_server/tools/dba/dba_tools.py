@@ -46,7 +46,7 @@ def handle_dba_tableSqlList(conn: TeradataConnection, table_name: str, no_days: 
 
 #------------------ Tool  ------------------#
 # Get user SQL tool
-def handle_dba_userSqlList(conn: TeradataConnection, user_name: str, no_days: str | int | None = 7,  *args, **kwargs):
+def handle_dba_userSqlList(conn: TeradataConnection, user_name: str = "", no_days: str | int | None = 7,  *args, **kwargs):
     """
     Get a list of SQL run by a user in the last number of days if a user name is provided, otherwise get list of all SQL in the last number of days.
 
@@ -59,8 +59,8 @@ def handle_dba_userSqlList(conn: TeradataConnection, user_name: str, no_days: st
     """
     logger.debug(f"Tool: handle_dba_userSqlList: Args: user_name: {user_name}")
 
-    # Treat wildcards as "all users" (planner may pass * or % instead of omitting)
-    if user_name and user_name.strip() in ("*", "%"):
+    # Treat wildcards as "all users" (planner may pass *, %, or "all" instead of omitting)
+    if user_name and user_name.strip().lower() in ("*", "%", "all"):
         user_name = ""
 
     with conn.cursor() as cur:
@@ -252,6 +252,7 @@ def handle_dba_resusageSummary(conn: TeradataConnection,
                                  dimensions: list[str] | None = None,
                                  user_name: str | None = None,
                                  date:  str | None = None,
+                                 no_days: str | int | None = 30,
                                  dayOfWeek:  str | None = None,
                                  hourOfDay:  str | None = None,
                                  workloadType: str | None = None,
@@ -266,6 +267,7 @@ def handle_dba_resusageSummary(conn: TeradataConnection,
       dimensions - list of dimensions to aggregate the resource usage summary. All dimensions are: ["LogDate", "hourOfDay", "dayOfWeek", "workloadType", "workloadComplexity", "UserName", "AppId"]
       user_name - user name
       date - Date to analyze, formatted as `YYYY-MM-DD`
+      no_days - number of days to look back (default 30)
       dayOfWeek - day of the week to analyze
       hourOfDay - hour of day to analyze
       workloadType - workload type to analyze, example: 'LOAD', 'ETL/ELT', 'EXPORT', 'QUERY', 'ADMIN', 'OTHER'
@@ -273,11 +275,18 @@ def handle_dba_resusageSummary(conn: TeradataConnection,
       AppId - Application ID to analyze, example: 'TPTLOAD%', 'TPTUPD%', 'FASTLOAD%', 'MULTLOAD%', 'EXECUTOR%', 'JDBC%'
 
     """
-    logger.debug(f"Tool: handle_dba_resusageSummary: Args: dimensions: {dimensions}")
+    logger.debug(f"Tool: handle_dba_resusageSummary: Args: dimensions: {dimensions}, no_days: {no_days}")
 
-    # Treat wildcards as "all users" (planner may pass * or % instead of omitting)
-    if user_name and user_name.strip() in ("*", "%"):
+    # Treat wildcards as "all users" (planner may pass *, %, or "all" instead of omitting)
+    if user_name and user_name.strip().lower() in ("*", "%", "all"):
         user_name = None
+
+    # Normalize no_days: planner sends str or int inconsistently
+    if no_days is not None:
+        try:
+            no_days = int(no_days)
+        except (ValueError, TypeError):
+            no_days = 30
 
     comment="Total system resource usage summary."
 
@@ -368,7 +377,7 @@ def handle_dba_resusageSummary(conn: TeradataConnection,
                 INNER JOIN Sys_Calendar.CALENDAR QryCal
                     ON QryCal.calendar_date = CAST(QryLog.Starttime as DATE)
             WHERE
-                CAST(QryLog.Starttime as DATE) BETWEEN CURRENT_DATE - 30 AND CURRENT_DATE
+                CAST(QryLog.Starttime as DATE) BETWEEN CURRENT_DATE - {no_days} AND CURRENT_DATE
                 AND StartTime IS NOT NULL
                 {filter_clause}
         ) AS QryDetails
@@ -404,9 +413,9 @@ def handle_dba_tableUsageImpact(conn: TeradataConnection, database_name: str | N
     logger.debug(f"Tool: handle_dba_tableUsageImpact: Args: database_name: {database_name}, user_name: {user_name}")
 
     # Treat wildcards as "all" (planner may pass * or % instead of omitting)
-    if user_name and user_name.strip() in ("*", "%"):
+    if user_name and user_name.strip().lower() in ("*", "%", "all"):
         user_name = None
-    if database_name and database_name.strip() in ("*", "%"):
+    if database_name and database_name.strip().lower() in ("*", "%", "all"):
         database_name = None
 
     database_name_filter = f"AND objectdatabasename = '{database_name}'" if database_name else ""
