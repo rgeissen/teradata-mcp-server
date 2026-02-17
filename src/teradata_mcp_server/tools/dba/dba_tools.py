@@ -189,7 +189,7 @@ def handle_dba_tableSpace(conn: TeradataConnection, database_name: str | None = 
 
 #------------------ Tool  ------------------#
 # Get database space tool
-def handle_dba_databaseSpace(conn: TeradataConnection, database_name: str | None | None, *args, **kwargs):
+def handle_dba_databaseSpace(conn: TeradataConnection, database_name: str | None = None, *args, **kwargs):
     """
     Get database space if database name is provided, otherwise get all databases space allocations.
 
