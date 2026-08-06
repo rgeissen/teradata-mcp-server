@@ -19,7 +19,7 @@ from teradata_mcp_server.tools.utils import create_response, rows_to_json
 logger = logging.getLogger("teradata_mcp_server")
 
 
-def handle_graph_findRootObjects(
+def handle_graph_findRootObjects(  # noqa: PLR0917
     conn: TeradataConnection,
     container_pattern: str,
     exclude_objects: str = "",

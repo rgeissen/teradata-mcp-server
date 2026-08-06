@@ -469,7 +469,7 @@ DEFAULT_MAX_WORKERS = 8
 
 # ------------------ Tool  ------------------#
 # Column metadata tool
-def handle_base_columnMetadata(
+def handle_base_columnMetadata(  # noqa: PLR0917
     conn: TeradataConnection,
     database_name: str,
     object_name: str | None = None,

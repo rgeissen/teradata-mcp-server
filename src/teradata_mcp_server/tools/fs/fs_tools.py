@@ -393,7 +393,7 @@ def handle_fs_getFeatures(conn: TeradataConnection, fs_config, *args, **kwargs):
 #       conn (TeradataConnection) - Teradata connection object for executing SQL queries
 #       database_name - the database name to check for existence
 # #     Returns: True or False
-def handle_fs_createDataset(
+def handle_fs_createDataset(  # noqa: PLR0917
     conn: TeradataConnection,
     fs_config,
     entity_name: str,

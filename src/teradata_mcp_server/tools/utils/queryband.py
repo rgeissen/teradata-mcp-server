@@ -12,7 +12,7 @@ def sanitize_qb_value(val: str | None) -> str:
     return s.strip()
 
 
-def build_queryband(
+def build_queryband(  # noqa: PLR0917
     application: str,
     profile: str | None,
     process_id: str,

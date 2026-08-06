@@ -18,10 +18,7 @@ required is `SELECT` on an edge repository conforming to the
 #           For AI-Native Data Products, skip this — use lineage_graph directly:
 #             edge_repository="{ProductName}_Semantic.lineage_graph"
 ddl = handle_graph_edgeContractDDL(
-    conn=connection,
-    target_database="MY_PROJECT_Semantic",
-    object_name="EdgeRepository",
-    output_type="TABLE"
+    conn=connection, target_database="MY_PROJECT_Semantic", object_name="EdgeRepository", output_type="TABLE"
 )
 
 # Step 1 — Find root objects (seed points for analysis)
@@ -29,7 +26,7 @@ roots = handle_graph_findRootObjects(
     conn=connection,
     container_pattern="%MY_PROJECT%",
     object_types="Table",
-    edge_repository="MY_PROJECT_Semantic.EdgeRepository"
+    edge_repository="MY_PROJECT_Semantic.EdgeRepository",
 )
 
 # Step 2 — Compute BFS hop distances and group into migration waves
@@ -37,7 +34,7 @@ waves = handle_graph_bfsLevels(
     conn=connection,
     root_node_list="MY_DB_STD_T.source_table_a,MY_DB_STD_T.source_table_b",
     include_containers="MY_DB%",
-    edge_repository="MY_PROJECT_Semantic.EdgeRepository"
+    edge_repository="MY_PROJECT_Semantic.EdgeRepository",
 )
 
 # Objects grouped by nearest_root  = migration wave grouping
@@ -48,7 +45,7 @@ lineage = handle_graph_traceLineage(
     conn=connection,
     object_name="MY_DB_STD_T.source_table_a",
     max_depth_down=5,
-    edge_repository="MY_PROJECT_Semantic.EdgeRepository"
+    edge_repository="MY_PROJECT_Semantic.EdgeRepository",
 )
 ```
 
@@ -123,7 +120,7 @@ This enables end-to-end lineage traversal through jobs, not just between tables.
 If you have a data product built on the [AI-Native Data Product standard](https://github.com/Teradata/ai-native-data-product), the `{ProductName}_Semantic.lineage_graph` view (Observability Module v1.5) already conforms to this contract. Use it directly:
 
 ```python
-edge_repository="{ProductName}_Semantic.lineage_graph"
+edge_repository = "{ProductName}_Semantic.lineage_graph"
 ```
 
 No DDL generation required.
@@ -180,20 +177,14 @@ Call this first if you don't yet have an edge repository. No database connection
 ```python
 # Generate a CREATE TABLE with sample DML
 result = handle_graph_edgeContractDDL(
-    conn=connection,
-    target_database="MY_PROJECT_Semantic",
-    object_name="EdgeRepository",
-    output_type="TABLE"
+    conn=connection, target_database="MY_PROJECT_Semantic", object_name="EdgeRepository", output_type="TABLE"
 )
-print(result[0]['ddl'])        # Run this in Teradata
-print(result[0]['sample_dml']) # Optional: insert sample rows
+print(result[0]["ddl"])  # Run this in Teradata
+print(result[0]["sample_dml"])  # Optional: insert sample rows
 
 # Generate a VIEW template to wrap an existing lineage source
 result = handle_graph_edgeContractDDL(
-    conn=connection,
-    target_database="MY_PROJECT_Semantic",
-    object_name="lineage_graph",
-    output_type="VIEW"
+    conn=connection, target_database="MY_PROJECT_Semantic", object_name="lineage_graph", output_type="VIEW"
 )
 ```
 
@@ -232,9 +223,9 @@ result = handle_graph_findRootObjects(
     conn=connection,
     container_pattern="MY_DB_STD_T,MY_DB_STD_V",
     object_types="Table",
-    edge_repository="MY_PROJECT_Semantic.EdgeRepository"
+    edge_repository="MY_PROJECT_Semantic.EdgeRepository",
 )
-for obj in result['results']['summary']['top_impact_objects']:
+for obj in result["results"]["summary"]["top_impact_objects"]:
     print(f"  {obj['name']} → {obj['downstream_count']} dependents")
 ```
 
@@ -282,7 +273,7 @@ result = handle_graph_bfsLevels(
     max_depth_up=0,
     max_depth_down=10,
     include_containers="MY_DB%,REPORTING%",
-    edge_repository="MY_PROJECT_Semantic.EdgeRepository"
+    edge_repository="MY_PROJECT_Semantic.EdgeRepository",
 )
 # Sort by downstream_level ascending for deployment order
 # Group by nearest_root for wave assignment
@@ -321,7 +312,7 @@ result = handle_graph_traceLineage(
     object_name="MY_DB_STD_T.core_entity",
     max_depth_up=0,
     max_depth_down=5,
-    edge_repository="MY_PROJECT_Semantic.EdgeRepository"
+    edge_repository="MY_PROJECT_Semantic.EdgeRepository",
 )
 print(f"Downstream dependents: {len(result['results']['downstream_edges'])}")
 ```
@@ -348,14 +339,12 @@ Run this tool before wave planning to confirm the graph is a valid DAG. A cycle 
 
 ```python
 result = handle_graph_detectCycles(
-    conn=connection,
-    container_pattern="MY_DB%",
-    edge_repository="MY_PROJECT_Semantic.EdgeRepository"
+    conn=connection, container_pattern="MY_DB%", edge_repository="MY_PROJECT_Semantic.EdgeRepository"
 )
-print(result['results']['summary_stats'][0]['Summary_Message'])
+print(result["results"]["summary_stats"][0]["Summary_Message"])
 # "No cycles detected — graph is a DAG."
 # or: "3 cycle(s) detected."
-for cycle in result['results']['cycle_summaries']:
+for cycle in result["results"]["cycle_summaries"]:
     print(f"  Cycle {cycle['Cycle_Id']}: {cycle['Cycle_Path']}")
 ```
 
@@ -381,13 +370,10 @@ A connected component is a maximal set of nodes reachable from one another when 
 
 ```python
 result = handle_graph_connectedComponents(
-    conn=connection,
-    container_pattern="MY_DB%",
-    edge_repository="MY_PROJECT_Semantic.EdgeRepository"
+    conn=connection, container_pattern="MY_DB%", edge_repository="MY_PROJECT_Semantic.EdgeRepository"
 )
-stats = result['results']['summary_stats'][0]
-print(f"{stats['Component_Count']} components, "
-      f"largest has {stats['Largest_Component']} nodes")
+stats = result["results"]["summary_stats"][0]
+print(f"{stats['Component_Count']} components, largest has {stats['Largest_Component']} nodes")
 ```
 
 ---
@@ -418,17 +404,16 @@ result = handle_graph_analyseDatabase(
     container_pattern="MY_DB%",
     top_n_roots=6,
     max_depth_down=10,
-    edge_repository="MY_PROJECT_Semantic.EdgeRepository"
+    edge_repository="MY_PROJECT_Semantic.EdgeRepository",
 )
 
-root_count   = result['results']['root_objects']['summary']['total_root_objects']
-cycle_count  = result['results']['cycles']['stats'][0]['Cycle_Count']
-comp_count   = result['results']['components']['stats'][0]['Component_Count']
-bfs_nodes    = result['results']['bfs_waves']['summary']['total_nodes']
-total_ms     = result['results']['edge_stats']['total_time_ms']
+root_count = result["results"]["root_objects"]["summary"]["total_root_objects"]
+cycle_count = result["results"]["cycles"]["stats"][0]["Cycle_Count"]
+comp_count = result["results"]["components"]["stats"][0]["Component_Count"]
+bfs_nodes = result["results"]["bfs_waves"]["summary"]["total_nodes"]
+total_ms = result["results"]["edge_stats"]["total_time_ms"]
 
-print(f"{root_count} roots | {cycle_count} cycles | "
-      f"{comp_count} components | {bfs_nodes} BFS nodes | {total_ms}ms")
+print(f"{root_count} roots | {cycle_count} cycles | {comp_count} components | {bfs_nodes} BFS nodes | {total_ms}ms")
 ```
 
 ---
@@ -555,9 +540,7 @@ graph:
 ```python
 # 1. Verify object exists and find exact FQ name
 result = handle_graph_findRootObjects(
-    conn=connection,
-    container_pattern="MY_DB_STD_T",
-    edge_repository="MY_PROJECT_Semantic.EdgeRepository"
+    conn=connection, container_pattern="MY_DB_STD_T", edge_repository="MY_PROJECT_Semantic.EdgeRepository"
 )
 # Check result for the exact FullyQualifiedName
 
@@ -566,20 +549,19 @@ result = handle_graph_bfsLevels(
     conn=connection,
     root_node_list="MY_DB_STD_T.my_root_table",
     max_depth_down=2,
-    edge_repository="MY_PROJECT_Semantic.EdgeRepository"
+    edge_repository="MY_PROJECT_Semantic.EdgeRepository",
 )
 
 # 3. Check cycle-free before wave planning
 result = handle_graph_detectCycles(
-    conn=connection,
-    container_pattern="MY_DB%",
-    edge_repository="MY_PROJECT_Semantic.EdgeRepository"
+    conn=connection, container_pattern="MY_DB%", edge_repository="MY_PROJECT_Semantic.EdgeRepository"
 )
-print(result['results']['summary_stats'][0]['Summary_Message'])
+print(result["results"]["summary_stats"][0]["Summary_Message"])
 
 # 4. Validate edge repository conforms to contract
 #    (Run the validation query from graph_edgeContractDDL sample_dml output)
-base_readQuery(sql="""
+base_readQuery(
+    sql="""
     SELECT 'NULL_CHECK' AS Validation, COUNT(*) AS Violations
     FROM MY_PROJECT_Semantic.EdgeRepository
     WHERE Src_Container_Name IS NULL
@@ -588,7 +570,8 @@ base_readQuery(sql="""
        OR Tgt_Container_Name IS NULL
        OR Tgt_Object_Name    IS NULL
        OR Tgt_Kind           IS NULL
-""")
+"""
+)
 ```
 
 ---

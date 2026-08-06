@@ -195,7 +195,7 @@ def _find_cycles_dfs(nodes: set, adj: dict[str, list[str]]) -> list[list[str]]:
 # ═══════════════════════════════════════════════════════════════════
 
 
-def _run_bfs(
+def _run_bfs(  # noqa: PLR0917
     root_fqs: list[str],
     fwd_adj: dict[str, list[str]],
     rev_adj: dict[str, list[str]],
@@ -306,7 +306,7 @@ def _run_bfs(
 # ═══════════════════════════════════════════════════════════════════
 
 
-def handle_graph_analyseDatabase(
+def handle_graph_analyseDatabase(  # noqa: PLR0917
     conn: TeradataConnection,
     container_pattern: str,
     exclude_objects: str = "",
