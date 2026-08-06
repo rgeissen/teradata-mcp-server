@@ -484,7 +484,7 @@ DOWNSTREAM (What Depends On These Objects)
 # ---------------------------------------------------------------------------
 
 
-def handle_graph_traceLineage(
+def handle_graph_traceLineage(  # noqa: PLR0917
     conn: TeradataConnection,
     object_name: str,
     max_depth_up: int = 3,

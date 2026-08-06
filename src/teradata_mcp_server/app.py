@@ -935,7 +935,7 @@ def create_mcp_app(settings: Settings):
                 parts[idx] = part
             return "".join(parts)
 
-        def _cube_query_tool(
+        def _cube_query_tool(  # noqa: PLR0917
             dimensions: str, measures: str, filter: str, res_filter: str, order_by: str, top: int, **kwargs
         ) -> str:
             """
@@ -1149,7 +1149,7 @@ def create_mcp_app(settings: Settings):
             logger.debug(f"  {param_name}: annotation={param.annotation}, default={param.default}")
 
         # Create executor function that will be run in thread
-        def executor(dimensions, measures, filter="", res_filter="", order_by="", top=None, **kwargs):
+        def executor(dimensions, measures, filter="", res_filter="", order_by="", top=None, **kwargs):  # noqa: PLR0917
             normalised_kwargs = _normalise_yaml_optional_params(param_defs, kwargs)
             # Validate custom parameters
             missing = [n for n in required_custom_params if n not in normalised_kwargs]

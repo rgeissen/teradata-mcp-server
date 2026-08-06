@@ -844,7 +844,7 @@ def remove_AWS_S3_backup_configuration(aws_acct_name: str) -> str:
         return f"❌ Error removing AWS S3 configuration '{aws_acct_name}': {str(e)}"
 
 
-def manage_AWS_S3_backup_configurations(
+def manage_AWS_S3_backup_configurations(  # noqa: PLR0917
     operation: str,
     accessId: str | None = None,
     accessKey: str | None = None,
@@ -982,7 +982,7 @@ def manage_AWS_S3_backup_configurations(
 # ------------------ Media Server Operations ------------------#
 
 
-def manage_dsa_media_servers(
+def manage_dsa_media_servers(  # noqa: PLR0917
     operation: str,
     server_name: str | None = None,
     port: int | None = None,
@@ -1255,7 +1255,7 @@ def _list_media_server_consumers_by_name(server_name: str) -> str:
 # ------------------ Teradata System Management Operations ------------------#
 
 
-def manage_dsa_systems(
+def manage_dsa_systems(  # noqa: PLR0917
     operation: str,
     system_name: str | None = None,
     tdp_id: str | None = None,
@@ -1892,7 +1892,7 @@ def handle_bar_manageDsaDiskFileSystem(
         return create_response(error_result, metadata)
 
 
-def handle_bar_manageAWSS3Operations(
+def handle_bar_manageAWSS3Operations(  # noqa: PLR0917
     conn: Any,  # Not used for DSA operations, but required by MCP framework
     operation: str,
     accessId: str | None = None,
@@ -1972,7 +1972,7 @@ def handle_bar_manageAWSS3Operations(
         return create_response(error_result, metadata)
 
 
-def handle_bar_manageMediaServer(
+def handle_bar_manageMediaServer(  # noqa: PLR0917
     conn: Any,  # Not used for DSA operations, but required by MCP framework
     operation: str,
     server_name: str | None = None,
@@ -2054,7 +2054,7 @@ def handle_bar_manageMediaServer(
         return create_response(error_result, metadata)
 
 
-def handle_bar_manageTeradataSystem(
+def handle_bar_manageTeradataSystem(  # noqa: PLR0917
     conn: Any,  # Not used for DSA operations, but required by MCP framework
     operation: str,
     system_name: str | None = None,
@@ -2151,7 +2151,7 @@ def handle_bar_manageTeradataSystem(
         return create_response(error_result, metadata)
 
 
-def handle_bar_manageDiskFileTargetGroup(
+def handle_bar_manageDiskFileTargetGroup(  # noqa: PLR0917
     conn: Any,  # Not used for DSA operations, but required by MCP framework
     operation: str,
     target_group_name: str | None = None,

@@ -56,7 +56,7 @@ logger = logging.getLogger("teradata_mcp_server")
 # ---------------------------------------------------------------------------
 
 
-def handle_graph_bfsLevels(
+def handle_graph_bfsLevels(  # noqa: PLR0917
     conn: TeradataConnection,
     root_node_list: str,
     max_depth_up: int = 10,
