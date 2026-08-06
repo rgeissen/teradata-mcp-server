@@ -2030,18 +2030,18 @@ requires-dist = [
     { name = "pytest-asyncio", specifier = ">=0.23.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "pyyaml", specifier = ">=6.0.0" },
-    { name = "teradatasql", specifier = ">=20.0.0" },
+    { name = "teradatasql", specifier = ">=20.0.0.64" },
 ]
 
 [[package]]
 name = "teradatasql"
-version = "20.0.0.59"
+version = "20.0.0.64"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pycryptodome" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/89/2f/ad23eeef90eaea7c3cff3f0a5508bc7389fe3678eaf3e3616e7dd9a87e6f/teradatasql-20.0.0.59-py3-none-any.whl", hash = "sha256:971ff04a9664f3a08fcc2431e5c1d789d63654859f1856cd7e6328c30224c0cc", size = 210821129, upload-time = "2026-05-20T13:55:13.337Z" },
+    { url = "https://files.pythonhosted.org/packages/fb/cb/ad7abd818c3d038b2420d69030c4986ce88a7cfa1bb9669fb60a14835fdb/teradatasql-20.0.0.64-py3-none-any.whl", hash = "sha256:70513438093511641f336f6fadc95f87d239e3609572b89e247fe471ef3565a8", size = 124681608, upload-time = "2026-07-31T17:49:54.489Z" },
 ]
 
 [[package]]
