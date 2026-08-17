@@ -24,3 +24,8 @@ Start_MCP_Server.bat
 .deepeval/
 .pytest_cache/
 
+
+# Fork-local: AI assistant working notes, not part of the upstream project.
+# Carried forward from the pre-sync fork (tag pre-upstream-sync-20260817);
+# the only change of the fork's 19 commits that upstream did not absorb.
+CLAUDE.md
